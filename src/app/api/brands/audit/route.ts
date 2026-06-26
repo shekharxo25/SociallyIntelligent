@@ -144,7 +144,7 @@ Return the result STRICTLY as a raw JSON block matching this TypeScript interfac
       return NextResponse.json({ error: 'Gemini API Key is missing or invalid. Please check GEMINI_API_KEY in .env.local.' }, { status: 400 });
     } else {
       // Query Gemini API directly via REST
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
       const response = await fetch(geminiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
