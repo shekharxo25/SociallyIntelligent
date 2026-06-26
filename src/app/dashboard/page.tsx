@@ -58,6 +58,9 @@ const Youtube = (props: React.SVGProps<SVGSVGElement>) => (
 );
 
 export default function Dashboard() {
+  // Hydration state
+  const [isMounted, setIsMounted] = useState(false);
+
   // Brand States
   const [brands, setBrands] = useState<any[]>([]);
   const [selectedBrand, setSelectedBrand] = useState<any>(null);
@@ -102,6 +105,7 @@ export default function Dashboard() {
 
   // Load initial brands
   useEffect(() => {
+    setIsMounted(true);
     fetchBrands();
   }, []);
 
@@ -300,6 +304,18 @@ export default function Dashboard() {
     }
   };
 
+  // Safe client render guard
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-[#030305] flex items-center justify-center tech-grid">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+          <span className="text-xs text-gray-500 font-mono tracking-widest uppercase">Initializing Interface...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-[#030305] text-[#e2e8f0] tech-grid relative">
       
@@ -386,50 +402,6 @@ export default function Dashboard() {
             })}
           </nav>
         </div>
-
-        {/* Brand Ingestion Actions: Form directly in sidebar */}
-        <div className="pt-4 border-t border-white/[0.06] mt-8">
-          <span className="block text-[9px] text-gray-500 uppercase tracking-widest font-mono mb-2.5 px-1">Audit New Brand</span>
-          <form onSubmit={handleAuditBrand} className="space-y-2">
-            <input
-              type="text"
-              required
-              disabled={isAuditing}
-              placeholder="Brand Name (e.g. Supabase)"
-              value={auditBrandName}
-              onChange={(e) => setAuditBrandName(e.target.value)}
-              className="w-full bg-[#08080c] border border-white/[0.04] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition duration-300 placeholder-gray-600 font-medium"
-            />
-            <input
-              type="text"
-              disabled={isAuditing}
-              placeholder="Industry (e.g. Tech)"
-              value={auditIndustry}
-              onChange={(e) => setAuditIndustry(e.target.value)}
-              className="w-full bg-[#08080c] border border-white/[0.04] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition duration-300 placeholder-gray-600 font-medium"
-            />
-            <button
-              type="submit"
-              disabled={isAuditing || !auditBrandName.trim()}
-              className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 hover:shadow-[0_0_15px_rgba(99,102,241,0.3)] text-white text-xs font-semibold transition disabled:opacity-50 duration-300"
-            >
-              {isAuditing ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Auditing Web...
-                </>
-              ) : (
-                <>
-                  <FileSearch className="h-4 w-4" />
-                  Audit Brand
-                </>
-              )}
-            </button>
-          </form>
-          {auditSuccess && (
-            <p className="text-[10px] text-center text-teal-400 mt-2 bg-teal-950/20 border border-teal-900/50 p-2 rounded-lg font-mono animate-fade-in">{auditSuccess}</p>
-          )}
-        </div>
       </aside>
 
       {/* 2. MAIN WORKSPACE */}
@@ -485,7 +457,7 @@ export default function Dashboard() {
           
           {/* Keyless Mode Alert */}
           {(!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.includes('your-')) && (
-            <div className="mb-8 p-4 rounded-2xl border border-yellow-500/20 bg-yellow-500/[0.02] text-yellow-400 text-xs flex items-center gap-3 animate-fade-in">
+            <div className="mb-6 p-4 rounded-2xl border border-yellow-500/20 bg-yellow-500/[0.02] text-yellow-400 text-xs flex items-center gap-3 animate-fade-in">
               <Info className="h-4.5 w-4.5 shrink-0 text-yellow-500" />
               <div className="leading-relaxed">
                 <span className="font-semibold text-white uppercase tracking-wider block text-[10px] mb-0.5">Demo Mode Sandbox</span>
@@ -493,6 +465,60 @@ export default function Dashboard() {
               </div>
             </div>
           )}
+
+          {/* Audit Brand Search Bar - Above and in the Middle */}
+          <div className="max-w-2xl mx-auto mb-8 p-5 rounded-2xl glass-panel border border-indigo-500/10 relative overflow-hidden animate-fade-in">
+            {/* Ambient inner glow */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.03),transparent_60%)] pointer-events-none" />
+            
+            <form onSubmit={handleAuditBrand} className="w-full flex flex-col sm:flex-row items-center gap-3 relative z-10">
+              <div className="relative w-full sm:flex-1">
+                <FileSearch className="absolute left-3.5 top-3 h-4 w-4 text-gray-500" />
+                <input
+                  type="text"
+                  required
+                  disabled={isAuditing}
+                  placeholder="Brand Name to Audit (e.g. Supabase)"
+                  value={auditBrandName}
+                  onChange={(e) => setAuditBrandName(e.target.value)}
+                  className="w-full bg-[#08080c] border border-white/[0.04] rounded-xl pl-11 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition-all duration-300 font-semibold"
+                />
+              </div>
+              
+              <input
+                type="text"
+                disabled={isAuditing}
+                placeholder="Industry (e.g. Tech)"
+                value={auditIndustry}
+                onChange={(e) => setAuditIndustry(e.target.value)}
+                className="w-full sm:w-44 bg-[#08080c] border border-white/[0.04] rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition-all duration-300 font-semibold"
+              />
+              
+              <button
+                type="submit"
+                disabled={isAuditing || !auditBrandName.trim()}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 hover:shadow-[0_0_15px_rgba(99,102,241,0.3)] text-white text-xs font-bold uppercase tracking-wider transition-all duration-300 disabled:opacity-50 shrink-0 flex items-center justify-center gap-1.5"
+              >
+                {isAuditing ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Auditing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Audit Brand
+                  </>
+                )}
+              </button>
+            </form>
+            
+            {auditSuccess && (
+              <p className="text-[10px] text-center text-teal-400 mt-3 bg-teal-950/20 border border-teal-900/50 px-3.5 py-2 rounded-lg font-mono animate-fade-in">
+                {auditSuccess}
+              </p>
+            )}
+          </div>
 
           {/* ACTIVE TAB: OVERVIEW AUDIT */}
           {activeTab === 'overview' && (
