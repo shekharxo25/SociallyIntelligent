@@ -1,40 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { mockDb } from '@/lib/mockDb';
 
 const getMockAIResponse = (scope: string, brandName: string, question = '') => {
   if (scope === 'qa' && question) {
-    const lowerQ = question.toLowerCase();
-    if (lowerQ.includes('sentiment') || lowerQ.includes('perceive') || lowerQ.includes('opinion')) {
-      return {
-        answer: `Looking at the web listening mentions for **${brandName}**:\n- Sentiment is highly positive on **Reddit** and tech blogs (e.g. u/startup_techie and TechTrends Blog praised the clean visual identity and simplicity).\n- Negative perception is primarily linked to **onboarding and setup docs** on X (@heykyle_codes mentioned setup connection timeout issues).\n\nTo improve sentiment: Address the onboarding bottlenecks and highlight user design testimonials in your marketing.`
-      };
-    }
-    if (lowerQ.includes('recommend') || lowerQ.includes('improve') || lowerQ.includes('reach')) {
-      return {
-        answer: `Here are the top strategic suggestions for **${brandName}**:\n1. **Reddit Engagement (High Priority)**: Respond to positive discussions in r/startups and r/saas to drive organic reach.\n2. **Setup Documentation (Medium Priority)**: Update the setup pages to prevent onboarding frustration.\n3. **Design Advocacy (Low Priority)**: Share visual walkthroughs on X to highlight your layout aesthetics, which users love.`
-      };
-    }
-    return {
-      answer: `Regarding the audit for **${brandName}**, we crawled 9 mentions across Reddit, X, YouTube, and Blogs. The net sentiment score is **76%** (generally positive). The primary buzz platform is Reddit. What specific mention or recommendation can I analyze further?`
-    };
+    return { answer: "AI Chat Assistant requires a configured Gemini API key." };
   }
-
-  return {
-    summary_markdown: `## AI Brand Audit Summary for ${brandName}
-
-### 📊 Perceptions & Sentiment Overview
-Audit sentiment for **${brandName}** is generally positive, with an average score of **76%**. Reddit and independent blogs display the highest brand advocacy, driven by users praising your minimal, clean approach. Negative sentiment (15%) is strictly isolated to onboarding friction and API configuration issues.
-
-### 🌟 Key Buzz Highlights
-* **Developer Advocacy**: u/startup_techie on Reddit noted: *"It is so much cleaner than legacy tools. Simple layout, gets the job done."*
-* **Design Testimonials**: @sarah_designs on X highlighted: *"The aesthetics of the dashboard are absolute fire!"*
-* **Onboarding friction**: @heykyle_codes on X flagged: *"Setup documentation could be improved; got a timeout error."*
-
-### 🛠️ Actionable Recommendations
-* **Reach (High Priority)**: Establish an official brand presence in active Reddit threads (r/startups, r/saas) to leverage organic buzz.
-* **Sentiment (Medium Priority)**: Update onboarding documentation and add setup checklists to reduce installation failure drop-offs.
-* **Branding (Low Priority)**: Package visual dashboard screenshots as marketing testimonials for X.`
-  };
+  return { summary_markdown: "AI Brand Audit report requires a configured Gemini API key." };
 };
 
 export async function POST(
@@ -52,9 +24,9 @@ export async function POST(
     const isMockAI = !apiKey || apiKey.includes('your-');
 
     const supabase = getSupabaseServer();
-    const isMockMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder') || brandId.startsWith('demo-');
+    const isMockMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder') || brandId.startsWith('mock-brand-');
 
-    // 1. Fetch data context from database
+    // 1. Fetch data context from database or mockDb
     let brandName = 'My App';
     let industry = 'General';
     let mentions: any[] = [];
@@ -73,16 +45,20 @@ export async function POST(
       const { data: dbRecs } = await supabase.from('brand_recommendations').select('*').eq('brand_id', brandId);
       if (dbRecs) recommendations = dbRecs;
     } else {
-      brandName = brandId.replace('demo-brand-', '') || 'My App';
-      // Capitalize first letter
-      brandName = brandName.charAt(0).toUpperCase() + brandName.slice(1);
+      const brand = mockDb.getBrand(brandId);
+      if (brand) {
+        brandName = brand.name;
+        industry = brand.industry || 'General';
+      }
+      mentions = mockDb.getMentions(brandId);
+      recommendations = mockDb.getRecommendations(brandId);
     }
 
-    // Fallback context values if database has no records
     if (mentions.length === 0) {
-      const simulated = getSimulatedMentionsContext(brandName);
-      mentions = simulated.mentions;
-      recommendations = simulated.recommendations;
+      if (scope === 'qa') {
+        return NextResponse.json({ answer: "I don't have any crawled social media mentions to analyze for this brand yet. Please run an audit sweep first." });
+      }
+      return NextResponse.json({ summary_markdown: "No crawled mentions found for this brand workspace. Please run an audit to generate AI reports." });
     }
 
     const contextPayload = {
@@ -100,10 +76,9 @@ export async function POST(
       }))
     };
 
-    // If no API key, return mock responses
+    // If no API key, return error
     if (isMockAI) {
-      const res = getMockAIResponse(scope, brandName, question);
-      return NextResponse.json(res);
+      return NextResponse.json({ error: 'Gemini API Key is missing or invalid. Please check GEMINI_API_KEY in .env.local.' }, { status: 400 });
     }
 
     // 2. Build Prompt based on scope
@@ -144,7 +119,8 @@ ${JSON.stringify(contextPayload, null, 2)}`;
     });
 
     if (!response.ok) {
-      throw new Error(`Gemini API returned status ${response.status}`);
+      const errText = await response.text();
+      throw new Error(`Gemini API returned status ${response.status}: ${errText}`);
     }
 
     const resJson = await response.json();
@@ -162,6 +138,8 @@ ${JSON.stringify(contextPayload, null, 2)}`;
           summary_markdown: resultText,
           raw_json: contextPayload
         });
+      } else if (isMockMode && scope === 'weekly_overview') {
+        mockDb.setAiInsights(brandId, scope, resultText);
       }
     } catch (dbErr) {
       console.error('Failed to cache AI insight:', dbErr);
@@ -174,11 +152,10 @@ ${JSON.stringify(contextPayload, null, 2)}`;
     return NextResponse.json({ summary_markdown: resultText });
   } catch (err: any) {
     console.error('AI Insights API Error:', err);
-    const fallbackBrandName = params.id.startsWith('demo-') ? params.id.replace('demo-brand-', '') : 'My App';
-    const res = getMockAIResponse(scope, fallbackBrandName, req.method === 'POST' ? '' : '');
-    return NextResponse.json(res);
+    return NextResponse.json({ error: `AI Insights request failed: ${err.message}` }, { status: 500 });
   }
 }
+
 
 function calculateSentimentDistribution(mentions: any[]) {
   let positive = 0;

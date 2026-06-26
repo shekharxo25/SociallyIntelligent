@@ -1,32 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-
-const getMockOverview = (brandId: string) => {
-  const dates = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    dates.push(d.toISOString().split('T')[0]);
-  }
-
-  const timeseries = dates.map((date, idx) => ({
-    date,
-    mentions: Math.round(5 + Math.sin(idx) * 3 + (idx === 4 ? 6 : 0)),
-    sentiment: parseFloat((0.72 + Math.sin(idx * 0.5) * 0.05).toFixed(2))
-  }));
-
-  const totalMentions = timeseries.reduce((acc, t) => acc + t.mentions, 0);
-
-  return {
-    kpis: {
-      mentions: { value: totalMentions, change: 8, percentChange: 12.5 },
-      avgSentiment: { value: 76, change: 4, percentChange: 5.5 },
-      primaryPlatform: { value: 'Reddit', change: 0, percentChange: 0 },
-      buzzIndex: { value: 'High', change: 0, percentChange: 0 }
-    },
-    timeseries
-  };
-};
+import { mockDb } from '@/lib/mockDb';
 
 export async function GET(
   req: NextRequest,
@@ -37,25 +11,40 @@ export async function GET(
     const supabase = getSupabaseServer();
     
     const isMockMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
-                       process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
+                       process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder') ||
+                       brandId.startsWith('mock-brand-');
 
-    if (isMockMode || brandId.startsWith('demo-')) {
-      return NextResponse.json(getMockOverview(brandId));
+    let mentions: any[] = [];
+
+    if (isMockMode) {
+      mentions = mockDb.getMentions(brandId);
+    } else {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        mentions = mockDb.getMentions(brandId);
+      } else {
+        // Fetch brand mentions
+        const { data, error: mentionsErr } = await supabase
+          .from('mentions')
+          .select('*')
+          .eq('brand_id', brandId);
+        
+        if (!mentionsErr && data) {
+          mentions = data;
+        }
+      }
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(getMockOverview(brandId));
-    }
-
-    // Fetch brand mentions
-    const { data: mentions, error: mentionsErr } = await supabase
-      .from('mentions')
-      .select('*')
-      .eq('brand_id', brandId);
-
-    if (mentionsErr || !mentions || mentions.length === 0) {
-      return NextResponse.json(getMockOverview(brandId));
+    if (mentions.length === 0) {
+      return NextResponse.json({
+        kpis: {
+          mentions: { value: 0, change: 0, percentChange: 0 },
+          avgSentiment: { value: 0, change: 0, percentChange: 0 },
+          primaryPlatform: { value: 'None', change: 0, percentChange: 0 },
+          buzzIndex: { value: 'None', change: 0, percentChange: 0 }
+        },
+        timeseries: []
+      });
     }
 
     // Calculate metrics
@@ -98,7 +87,7 @@ export async function GET(
     }
 
     mentions.forEach(m => {
-      const dateStr = new Date(m.published_at).toISOString().split('T')[0];
+      const dateStr = new Date(m.published_at || m.posted_at).toISOString().split('T')[0];
       const existing = dateMap.get(dateStr);
       if (existing) {
         existing.mentions += 1;
@@ -114,8 +103,8 @@ export async function GET(
 
     return NextResponse.json({
       kpis: {
-        mentions: { value: totalMentions, change: 3, percentChange: 15.0 },
-        avgSentiment: { value: avgSentiment, change: 2, percentChange: 2.5 },
+        mentions: { value: totalMentions, change: 0, percentChange: 0 },
+        avgSentiment: { value: avgSentiment, change: 0, percentChange: 0 },
         primaryPlatform: { value: primaryPlatform, change: 0, percentChange: 0 },
         buzzIndex: { value: buzzIndex, change: 0, percentChange: 0 }
       },
@@ -126,3 +115,4 @@ export async function GET(
     return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }
+

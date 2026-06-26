@@ -1,36 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-
-const getMockAudience = (brandId: string) => {
-  const dates = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    dates.push(d.toISOString().split('T')[0]);
-  }
-
-  const growth = dates.map((date, idx) => ({
-    date,
-    change: Math.round(5 + Math.sin(idx) * 2), // Daily mention volume change
-  }));
-
-  const sentimentTimeseries = dates.map((date, idx) => ({
-    date,
-    score: parseFloat((0.72 + Math.sin(idx * 0.5) * 0.05).toFixed(2)),
-  }));
-
-  return {
-    growth,
-    sentiment: {
-      distribution: {
-        positive: 65,
-        neutral: 20,
-        negative: 15,
-      },
-      timeseries: sentimentTimeseries,
-    }
-  };
-};
+import { mockDb } from '@/lib/mockDb';
 
 export async function GET(
   req: NextRequest,
@@ -41,25 +11,42 @@ export async function GET(
     const supabase = getSupabaseServer();
     
     const isMockMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
-                       process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
+                       process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder') ||
+                       brandId.startsWith('mock-brand-');
 
-    if (isMockMode || brandId.startsWith('demo-')) {
-      return NextResponse.json(getMockAudience(brandId));
+    let mentions: any[] = [];
+
+    if (isMockMode) {
+      mentions = mockDb.getMentions(brandId);
+    } else {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        mentions = mockDb.getMentions(brandId);
+      } else {
+        // Fetch brand mentions
+        const { data, error: mentionsErr } = await supabase
+          .from('mentions')
+          .select('*')
+          .eq('brand_id', brandId);
+        
+        if (!mentionsErr && data) {
+          mentions = data;
+        }
+      }
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json(getMockAudience(brandId));
-    }
-
-    // Fetch brand mentions
-    const { data: mentions, error: mentionsErr } = await supabase
-      .from('mentions')
-      .select('*')
-      .eq('brand_id', brandId);
-
-    if (mentionsErr || !mentions || mentions.length === 0) {
-      return NextResponse.json(getMockAudience(brandId));
+    if (mentions.length === 0) {
+      return NextResponse.json({
+        growth: [],
+        sentiment: {
+          distribution: {
+            positive: 0,
+            neutral: 0,
+            negative: 0,
+          },
+          timeseries: [],
+        }
+      });
     }
 
     // Calculate distributions
@@ -92,7 +79,7 @@ export async function GET(
     }
 
     mentions.forEach(m => {
-      const dateStr = new Date(m.published_at).toISOString().split('T')[0];
+      const dateStr = new Date(m.published_at || m.posted_at).toISOString().split('T')[0];
       const existing = dateMap.get(dateStr);
       if (existing) {
         existing.change += 1;
@@ -123,3 +110,4 @@ export async function GET(
     return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }
+

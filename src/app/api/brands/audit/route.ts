@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { crawlBrandMentions } from '@/lib/crawler';
+import { mockDb } from '@/lib/mockDb';
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,12 +21,14 @@ export async function POST(req: NextRequest) {
     let isMockMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
     
     if (isMockMode) {
-      brandId = 'demo-brand-' + Math.random().toString(36).substring(2, 9);
+      const brand = mockDb.addBrand(brandName, industry);
+      brandId = brand.id;
     } else {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) {
         // Direct mock fallback for unauthorized demo
-        brandId = 'demo-brand-' + Math.random().toString(36).substring(2, 9);
+        const brand = mockDb.addBrand(brandName, industry);
+        brandId = brand.id;
         isMockMode = true;
       } else {
         // Fetch existing or insert new brand
@@ -138,8 +141,7 @@ Return the result STRICTLY as a raw JSON block matching this TypeScript interfac
     let parsedResult = { mentions: [] as any[], recommendations: [] as any[] };
 
     if (isMockAI) {
-      // Simulation generator if no Gemini key is provided
-      parsedResult = getLocalSimulator(brandName, industry);
+      return NextResponse.json({ error: 'Gemini API Key is missing or invalid. Please check GEMINI_API_KEY in .env.local.' }, { status: 400 });
     } else {
       // Query Gemini API directly via REST
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
@@ -158,42 +160,48 @@ Return the result STRICTLY as a raw JSON block matching this TypeScript interfac
         try {
           parsedResult = JSON.parse(rawText.trim());
         } catch (jsonErr) {
-          console.error('Failed to parse Gemini JSON output, using simulation:', jsonErr);
-          parsedResult = getLocalSimulator(brandName, industry);
+          console.error('Failed to parse Gemini JSON output:', jsonErr);
+          return NextResponse.json({ error: 'Failed to parse brand analysis from Gemini AI. Please try again.' }, { status: 500 });
         }
       } else {
-        console.error('Gemini API request failed in Audit:', await response.text());
-        parsedResult = getLocalSimulator(brandName, industry);
+        const errText = await response.text();
+        console.error('Gemini API request failed in Audit:', errText);
+        return NextResponse.json({ error: `Gemini AI API request failed. Response: ${errText}` }, { status: 500 });
       }
     }
 
-    // 4. Store Mentions and Recommendations in Supabase (if not in mock mode)
-    if (!isMockMode && parsedResult.mentions.length > 0) {
-      // Clear old audit data to prevent cluttering
-      await supabase.from('mentions').delete().eq('brand_id', brandId);
-      await supabase.from('brand_recommendations').delete().eq('brand_id', brandId);
+    // 4. Store Mentions and Recommendations in Supabase or mockDb
+    if (parsedResult.mentions.length > 0) {
+      if (isMockMode) {
+        mockDb.setMentions(brandId, parsedResult.mentions);
+        mockDb.setRecommendations(brandId, parsedResult.recommendations);
+      } else {
+        // Clear old audit data to prevent cluttering
+        await supabase.from('mentions').delete().eq('brand_id', brandId);
+        await supabase.from('brand_recommendations').delete().eq('brand_id', brandId);
 
-      // Insert mentions
-      const mentionsToInsert = parsedResult.mentions.map((m: any) => ({
-        brand_id: brandId,
-        platform: m.platform,
-        url: m.url,
-        author: m.author,
-        content_text: m.content_text,
-        sentiment: m.sentiment,
-        sentiment_score: m.sentiment_score,
-        published_at: new Date(m.date || new Date()).toISOString()
-      }));
-      await supabase.from('mentions').insert(mentionsToInsert);
+        // Insert mentions
+        const mentionsToInsert = parsedResult.mentions.map((m: any) => ({
+          brand_id: brandId,
+          platform: m.platform,
+          url: m.url,
+          author: m.author,
+          content_text: m.content_text,
+          sentiment: m.sentiment,
+          sentiment_score: m.sentiment_score,
+          published_at: new Date(m.date || new Date()).toISOString()
+        }));
+        await supabase.from('mentions').insert(mentionsToInsert);
 
-      // Insert recommendations
-      const recsToInsert = parsedResult.recommendations.map((r: any) => ({
-        brand_id: brandId,
-        category: r.category,
-        recommendation_text: r.recommendation_text,
-        priority: r.priority
-      }));
-      await supabase.from('brand_recommendations').insert(recsToInsert);
+        // Insert recommendations
+        const recsToInsert = parsedResult.recommendations.map((r: any) => ({
+          brand_id: brandId,
+          category: r.category,
+          recommendation_text: r.recommendation_text,
+          priority: r.priority
+        }));
+        await supabase.from('brand_recommendations').insert(recsToInsert);
+      }
     }
 
     return NextResponse.json({
@@ -210,6 +218,7 @@ Return the result STRICTLY as a raw JSON block matching this TypeScript interfac
     return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }
+
 
 // Local simulation fallback
 function getLocalSimulator(brandName: string, industry: string) {

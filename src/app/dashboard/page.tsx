@@ -65,6 +65,7 @@ export default function Dashboard() {
   const [brands, setBrands] = useState<any[]>([]);
   const [selectedBrand, setSelectedBrand] = useState<any>(null);
   const [isBrandDropdownOpen, setIsBrandDropdownOpen] = useState(false);
+  const [hasGeminiKey, setHasGeminiKey] = useState(true);
   
   // Audit Modal/Form
   const [isAuditing, setIsAuditing] = useState(false);
@@ -107,7 +108,19 @@ export default function Dashboard() {
   useEffect(() => {
     setIsMounted(true);
     fetchBrands();
+    fetchConfig();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fetchConfig = async () => {
+    try {
+      const res = await fetch('/api/config');
+      const data = await res.json();
+      setHasGeminiKey(data.hasGeminiKey);
+    } catch (err) {
+      console.error('Failed to fetch config:', err);
+    }
+  };
 
   // Fetch data when brand changes
   useEffect(() => {
@@ -117,6 +130,7 @@ export default function Dashboard() {
       fetchAudienceData();
       fetchAIInsight();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBrand, timeRange]);
 
   // Scroll chat to bottom
@@ -136,6 +150,8 @@ export default function Dashboard() {
         } else if (!selectedBrand) {
           setSelectedBrand(data[0]);
         }
+      } else {
+        setSelectedBrand(null);
       }
     } catch (err) {
       console.error('Failed to fetch brands:', err);
@@ -456,12 +472,12 @@ export default function Dashboard() {
         <div className="flex-1 overflow-y-auto p-8 min-h-0">
           
           {/* Keyless Mode Alert */}
-          {(!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.includes('your-')) && (
+          {!hasGeminiKey && (
             <div className="mb-6 p-4 rounded-2xl border border-yellow-500/20 bg-yellow-500/[0.02] text-yellow-400 text-xs flex items-center gap-3 animate-fade-in">
-              <Info className="h-4.5 w-4.5 shrink-0 text-yellow-500" />
+              <AlertTriangle className="h-4.5 w-4.5 shrink-0 text-yellow-500" />
               <div className="leading-relaxed">
-                <span className="font-semibold text-white uppercase tracking-wider block text-[10px] mb-0.5">Demo Mode Sandbox</span>
-                GEMINI_API_KEY is not defined. We are simulating context-specific social listening mentions and recommendations. Populate the env variable to query actual Gemini models!
+                <span className="font-semibold text-white uppercase tracking-wider block text-[10px] mb-0.5">Missing Gemini API Key</span>
+                GEMINI_API_KEY is not defined. The application requires a valid API key in <code>.env.local</code> to query actual Gemini models and analyze search results.
               </div>
             </div>
           )}
@@ -520,8 +536,40 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* ACTIVE TAB: OVERVIEW AUDIT */}
-          {activeTab === 'overview' && (
+          {!selectedBrand ? (
+            <div className="max-w-2xl mx-auto my-12 p-8 rounded-2xl glass-panel border border-indigo-500/10 text-center relative overflow-hidden animate-fade-in">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.02),transparent_70%)] pointer-events-none" />
+              
+              <div className="flex flex-col items-center justify-center gap-4 relative z-10">
+                <div className="p-4 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.1)]">
+                  <Bot className="h-8 w-8 animate-pulse text-indigo-400" />
+                </div>
+                
+                <h3 className="text-lg font-bold text-white uppercase tracking-wider display-font mt-2">
+                  SociallyIntelligent Workspace
+                </h3>
+                
+                <p className="text-xs text-gray-400 max-w-md leading-relaxed">
+                  Enter a brand name and industry above, then click <strong className="text-indigo-400">Audit Brand</strong>. 
+                  The workspace will crawl DuckDuckGo search indexes and analyze brand sentiment, mentions, and recommendations in real-time.
+                </p>
+
+                <div className="flex items-center gap-3 mt-4 text-[10px] text-gray-500 font-mono">
+                  <span className="flex items-center gap-1.5 border border-white/[0.04] bg-[#07070a] px-3 py-1.5 rounded-lg">
+                    <Globe className="h-3.5 w-3.5 text-teal-400" />
+                    Real-time Search Crawls
+                  </span>
+                  <span className="flex items-center gap-1.5 border border-white/[0.04] bg-[#07070a] px-3 py-1.5 rounded-lg">
+                    <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
+                    Gemini Sentiment Analysis
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* ACTIVE TAB: OVERVIEW AUDIT */}
+              {activeTab === 'overview' && (
             <div className="space-y-8">
               {isLoadingOverview ? (
                 <div className="flex flex-col items-center justify-center py-28 gap-4 animate-pulse">
@@ -1094,6 +1142,9 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+          )}
+
+            </>
           )}
 
         </div>

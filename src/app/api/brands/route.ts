@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-
-// Mock brands fallback for demo/unconfigured states
-const MOCK_BRANDS = [
-  { id: '11111111-1111-1111-1111-111111111111', name: 'Acme Brand', industry: 'SaaS', created_at: new Date().toISOString() },
-  { id: '22222222-2222-2222-2222-222222222222', name: 'Indie Creator', industry: 'Content Creation', created_at: new Date().toISOString() },
-];
+import { mockDb } from '@/lib/mockDb';
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,13 +11,13 @@ export async function GET(req: NextRequest) {
                        process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
 
     if (isMockMode) {
-      return NextResponse.json(MOCK_BRANDS);
+      return NextResponse.json(mockDb.getBrands());
     }
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      // In local development/demo, if not logged in, we can fall back to mock data
-      return NextResponse.json(MOCK_BRANDS);
+      // In local development/demo without Supabase, we fall back to mockDb
+      return NextResponse.json(mockDb.getBrands());
     }
 
     const { data, error } = await supabase
@@ -31,14 +26,14 @@ export async function GET(req: NextRequest) {
       .order('name', { ascending: true });
 
     if (error) {
-      console.error('Error fetching brands:', error);
-      return NextResponse.json(MOCK_BRANDS);
+      console.error('Error fetching brands from Supabase:', error);
+      return NextResponse.json(mockDb.getBrands());
     }
 
     return NextResponse.json(data);
   } catch (err) {
     console.error('Unhandled brands API error:', err);
-    return NextResponse.json(MOCK_BRANDS);
+    return NextResponse.json([]);
   }
 }
 
@@ -56,18 +51,15 @@ export async function POST(req: NextRequest) {
                        process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
 
     if (isMockMode) {
-      const newBrand = {
-        id: Math.random().toString(36).substring(2, 15),
-        name,
-        industry: industry || 'General',
-        created_at: new Date().toISOString(),
-      };
+      const newBrand = mockDb.addBrand(name, industry);
       return NextResponse.json(newBrand, { status: 201 });
     }
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      // Fallback for unauthorized demo POST
+      const newBrand = mockDb.addBrand(name, industry);
+      return NextResponse.json(newBrand, { status: 201 });
     }
 
     const { data, error } = await supabase
@@ -91,3 +83,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }
+
