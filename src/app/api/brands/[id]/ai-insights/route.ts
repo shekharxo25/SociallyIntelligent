@@ -39,10 +39,12 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  let scope = 'weekly_overview';
   try {
     const brandId = params.id;
     const body = await req.json();
-    const { scope = 'weekly_overview', question = '' } = body;
+    scope = body.scope || 'weekly_overview';
+    const question = body.question || '';
 
     const apiKey = process.env.GEMINI_API_KEY;
     const isMockAI = !apiKey || apiKey.includes('your-');
@@ -85,7 +87,7 @@ export async function POST(
           answer: `Based on your channel statistics for this week:\n- **Total Views**: 45,600\n- **Subscribers Gained**: +120 (totaling 15,420)\n- **Average Engagement Rate**: 7.11%\n\nYour top video was **"How I Built MeltMini in 3 Days"**. Let me know if you want me to analyze specific posts or calculate metrics for a different time period!`
         });
       }
-      
+
       const markdown = MOCK_INSIGHTS[scope] || MOCK_INSIGHTS.weekly_overview;
       return NextResponse.json({ summary_markdown: markdown });
     }
@@ -121,7 +123,7 @@ ${JSON.stringify(contextPayload, null, 2)}`;
 
     // 3. Query Gemini API via REST (ultra-reliable, zero-config)
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-    
+
     const response = await fetch(geminiUrl, {
       method: 'POST',
       headers: {
@@ -176,7 +178,7 @@ ${JSON.stringify(contextPayload, null, 2)}`;
   } catch (err: any) {
     console.error('AI Insights API Error:', err);
     // Return mock fallback as graceful error handling
-    if (body.scope === 'qa') {
+    if (scope === 'qa') {
       return NextResponse.json({ answer: "I'm having trouble connecting to the AI service. Here is a baseline based on your metrics: total views this week were 45,600 with a 7.11% engagement rate." });
     }
     return NextResponse.json({ summary_markdown: MOCK_INSIGHTS.weekly_overview });

@@ -48,25 +48,28 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0B0F] text-[#F3F4F6] flex items-center justify-center p-4">
-      {/* Background Glow */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.05),transparent_50%)] pointer-events-none" />
+    <div className="min-h-screen bg-[#030305] text-[#e2e8f0] flex items-center justify-center p-4 tech-grid relative overflow-hidden">
+      
+      {/* Background Ambient Glows */}
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-500/5 rounded-full blur-[120px] pointer-events-none pulse-light" />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-500/5 rounded-full blur-[120px] pointer-events-none pulse-light" style={{ animationDelay: '2s' }} />
 
-      <div className="w-full max-w-md p-8 rounded-2xl border border-[#1E1E24] bg-[#0E0E12] shadow-2xl relative z-10">
+      <div className="w-full max-w-md p-8 rounded-2xl glass-panel relative z-10 animate-fade-in border border-white/[0.04]">
         
+        {/* Glowing top line */}
+        <div className="absolute top-0 left-10 right-10 h-[1px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent" />
+
         {/* Logo / Header */}
         <div className="flex flex-col items-center mb-8">
-          <div className="p-2.5 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 mb-3 shadow-lg">
-            <Sparkles className="h-6 w-6 text-white animate-pulse" />
+          <div className="p-3 rounded-xl bg-gradient-to-tr from-indigo-500 to-teal-500 mb-4 shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+            <Sparkles className="h-5 w-5 text-white animate-pulse" />
           </div>
-          <h2 className="text-xl font-bold text-white tracking-tight">Welcome to MeltMini</h2>
-          <p className="text-xs text-gray-500 mt-1.5 text-center">
-            Sign in to access your social media analytics dashboard.
-          </p>
+          <h2 className="text-xl font-bold text-white tracking-tight uppercase display-font">SociallyIntelligent</h2>
+          <span className="text-[9px] uppercase tracking-wider text-teal-400 font-mono font-bold mt-1">Cognitive analytics workspace</span>
         </div>
 
         {errorMessage && (
-          <div className="mb-4 p-3 rounded-lg border border-rose-900/30 bg-rose-950/20 text-rose-400 text-xs">
+          <div className="mb-5 p-3.5 rounded-xl border border-rose-500/20 bg-rose-500/[0.02] text-rose-400 text-xs font-mono animate-fade-in">
             {errorMessage}
           </div>
         )}
@@ -74,39 +77,39 @@ export default function Login() {
         {/* Form */}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-[10px] text-gray-500 font-semibold uppercase mb-1 tracking-wider">Email Address</label>
+            <label className="block text-[9px] text-gray-500 font-bold uppercase tracking-wider font-mono mb-1.5">Email Address</label>
             <input
               type="email"
               required
               placeholder="name@company.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-[#14141A] border border-[#1E1E24] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 transition placeholder-gray-600"
+              className="w-full bg-[#08080c] border border-white/[0.04] rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-indigo-500/50 transitionplaceholder-gray-700 font-medium"
             />
           </div>
 
           <div>
-            <label className="block text-[10px] text-gray-500 font-semibold uppercase mb-1 tracking-wider">Password</label>
+            <label className="block text-[9px] text-gray-500 font-bold uppercase tracking-wider font-mono mb-1.5">Password</label>
             <input
               type="password"
               required
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[#14141A] border border-[#1E1E24] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 transition placeholder-gray-600"
+              className="w-full bg-[#08080c] border border-white/[0.04] rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition placeholder-gray-700 font-medium"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm transition shadow-lg shadow-indigo-600/10 disabled:opacity-50 mt-6"
+            className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider transition-all duration-300 hover:shadow-[0_0_20px_rgba(99,102,241,0.2)] disabled:opacity-50 mt-6"
           >
             {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin text-white" />
             ) : (
               <>
-                Sign In
+                Access Account
                 <ArrowRight className="h-4 w-4" />
               </>
             )}
@@ -114,11 +117,11 @@ export default function Login() {
         </form>
 
         {/* Footer */}
-        <div className="text-center mt-6 pt-6 border-t border-[#1E1E24]">
+        <div className="text-center mt-8 pt-5 border-t border-white/[0.04]">
           <p className="text-xs text-gray-500">
-            Don't have an account?{' '}
-            <Link href="/auth/register" className="text-indigo-400 font-medium hover:underline">
-              Create one here
+            Need a workspace?{' '}
+            <Link href="/auth/register" className="text-indigo-400 font-semibold hover:text-indigo-300 transition-colors">
+              Initialize here
             </Link>
           </p>
         </div>
