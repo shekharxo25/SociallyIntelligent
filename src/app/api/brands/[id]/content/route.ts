@@ -1,72 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
-const getMockContent = (brandId: string) => {
-  const isAlt = brandId.startsWith('22222222');
-  
-  if (isAlt) {
-    return {
-      posts: [
-        {
-          id: 'alt-post-1',
-          platform: 'youtube',
-          platform_post_id: 'alt1',
-          url: 'https://youtube.com/watch?v=alt1',
-          posted_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-          content_text: 'Top 5 tools for Indie Creators (2026)',
-          content_type: 'video',
-          hashtags: ['creator', 'tools'],
-          metrics: { likes: 110, comments: 24, views: 1800, engagementRate: 7.4 }
-        },
-        {
-          id: 'alt-post-2',
-          platform: 'youtube',
-          platform_post_id: 'alt2',
-          url: 'https://youtube.com/watch?v=alt2',
-          posted_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          content_text: 'How to script your videos in 10 minutes',
-          content_type: 'short',
-          hashtags: ['shorts', 'writing'],
-          metrics: { likes: 350, comments: 12, views: 4200, engagementRate: 8.6 }
-        }
-      ]
-    };
+const getMockMentions = (brandId: string) => {
+  const dates = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().split('T')[0]);
   }
-
+  
   return {
     posts: [
       {
-        id: 'post-1',
-        platform: 'youtube',
-        platform_post_id: 'yt1',
-        url: 'https://youtube.com/watch?v=yt1',
-        posted_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-        content_text: 'How I Built MeltMini in 3 Days - The Zero Cost Stack',
-        content_type: 'video',
-        hashtags: ['saas', 'indiehackers', 'nextjs'],
-        metrics: { likes: 1250, comments: 242, views: 15400, engagementRate: 9.68 }
+        id: 'mock-m1',
+        platform: 'reddit',
+        url: 'https://reddit.com/r/startups/comments/mock1',
+        content_text: 'Honestly, this brand audit tool is exactly what we needed. Simple setup and direct marketing recommendations.',
+        posted_at: dates[6],
+        author: 'u/startup_techie',
+        sentiment: 'positive',
+        sentiment_score: 0.92
       },
       {
-        id: 'post-2',
-        platform: 'youtube',
-        platform_post_id: 'yt2',
-        url: 'https://youtube.com/watch?v=yt2',
-        posted_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-        content_text: 'Why complex analytics tools are dying',
-        content_type: 'video',
-        hashtags: ['startup', 'analytics'],
-        metrics: { likes: 840, comments: 118, views: 12200, engagementRate: 7.85 }
+        id: 'mock-m2',
+        platform: 'x',
+        url: 'https://twitter.com/mockstatus1',
+        content_text: 'Setup documentation is kind of confusing. I got a database connection timeout error on my first attempt.',
+        posted_at: dates[5],
+        author: '@heykyle_codes',
+        sentiment: 'negative',
+        sentiment_score: 0.21
       },
       {
-        id: 'post-3',
+        id: 'mock-m3',
         platform: 'youtube',
-        platform_post_id: 'yt3',
-        url: 'https://youtube.com/watch?v=yt3',
-        posted_at: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
-        content_text: 'Building in public: 0 to 100 subscribers',
-        content_type: 'short',
-        hashtags: ['shorts', 'buildinginpublic'],
-        metrics: { likes: 1980, comments: 94, views: 24800, engagementRate: 8.36 }
+        url: 'https://youtube.com/watch?v=mockyt1',
+        content_text: 'SociallyIntelligent is claims to be a simple, zero-cost social listener. Let us test its AI summary features to see if it works.',
+        posted_at: dates[4],
+        author: 'SaaS Builder Weekly',
+        sentiment: 'neutral',
+        sentiment_score: 0.52
+      },
+      {
+        id: 'mock-m4',
+        platform: 'blogs',
+        url: 'https://medium.com/techtrends/mockblog1',
+        content_text: 'Why zero-infra social listeners are rising. Modern founders prefer quick actionable dashboards over complex report builders.',
+        posted_at: dates[4],
+        author: 'TechTrends Blog',
+        sentiment: 'positive',
+        sentiment_score: 0.87
       }
     ]
   };
@@ -83,112 +66,41 @@ export async function GET(
     const isMockMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
                        process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
 
-    if (isMockMode) {
-      return NextResponse.json(getMockContent(brandId));
+    if (isMockMode || brandId.startsWith('demo-')) {
+      return NextResponse.json(getMockMentions(brandId));
     }
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json(getMockContent(brandId));
+      return NextResponse.json(getMockMentions(brandId));
     }
 
-    // Check if brand exists
-    const { data: brand, error: brandError } = await supabase
-      .from('brands')
-      .select('id')
-      .eq('id', brandId)
-      .single();
-
-    if (brandError || !brand) {
-      return NextResponse.json({ error: 'Brand not found or access denied' }, { status: 404 });
-    }
-
-    // Get platform accounts
-    const { data: accounts, error: accountsError } = await supabase
-      .from('platform_accounts')
-      .select('id, platform')
-      .eq('brand_id', brandId);
-
-    if (accountsError || !accounts || accounts.length === 0) {
-      return NextResponse.json({ posts: [] });
-    }
-
-    const accountIds = accounts.map(a => a.id);
-    const accountMap = new Map(accounts.map(a => [a.id, a.platform]));
-
-    // Fetch posts
-    const { data: posts, error: postsError } = await supabase
-      .from('posts')
+    // Fetch mentions
+    const { data: mentions, error: mentionsErr } = await supabase
+      .from('mentions')
       .select('*')
-      .in('platform_account_id', accountIds)
-      .order('posted_at', { ascending: false });
+      .eq('brand_id', brandId)
+      .order('published_at', { ascending: false });
 
-    if (postsError || !posts || posts.length === 0) {
-      return NextResponse.json(getMockContent(brandId));
+    if (mentionsErr || !mentions || mentions.length === 0) {
+      return NextResponse.json(getMockMentions(brandId));
     }
 
-    const postIds = posts.map(p => p.id);
+    // Map fields to match post structure in dashboard table
+    const posts = mentions.map(m => ({
+      id: m.id,
+      platform: m.platform,
+      url: m.url || '#',
+      posted_at: m.published_at,
+      content_text: m.content_text,
+      author: m.author || 'Anonymous',
+      sentiment: m.sentiment,
+      sentiment_score: m.sentiment_score
+    }));
 
-    // Fetch latest metrics for each post
-    // To do this simply, we will get all metrics and then grab the latest captured_at for each post_id
-    const { data: metrics, error: metricsError } = await supabase
-      .from('post_metrics')
-      .select('*')
-      .in('post_id', postIds)
-      .order('captured_at', { ascending: false });
-
-    if (metricsError || !metrics) {
-      return NextResponse.json(getMockContent(brandId));
-    }
-
-    // Keep only the latest metrics per post
-    const latestMetricsMap = new Map<string, any>();
-    metrics.forEach(m => {
-      if (!latestMetricsMap.has(m.post_id)) {
-        latestMetricsMap.set(m.post_id, m);
-      }
-    });
-
-    // Assemble final post objects
-    const assembledPosts = posts.map(post => {
-      const metric = latestMetricsMap.get(post.id) || {
-        likes: 0,
-        comments: 0,
-        shares: 0,
-        views: 0,
-        saves: 0
-      };
-
-      const platform = accountMap.get(post.platform_account_id) || 'youtube';
-
-      // Calculate engagement rate
-      const likes = Number(metric.likes || 0);
-      const comments = Number(metric.comments || 0);
-      const views = Number(metric.views || 0);
-      const engagements = likes + comments;
-      const engagementRate = views > 0 ? parseFloat(((engagements / views) * 100).toFixed(2)) : 0;
-
-      return {
-        id: post.id,
-        platform,
-        platform_post_id: post.platform_post_id,
-        url: post.url,
-        posted_at: post.posted_at,
-        content_text: post.content_text,
-        content_type: post.content_type || 'video',
-        hashtags: post.hashtags || [],
-        metrics: {
-          likes,
-          comments,
-          views,
-          engagementRate
-        }
-      };
-    });
-
-    return NextResponse.json({ posts: assembledPosts });
+    return NextResponse.json({ posts });
   } catch (err: any) {
-    console.error('Content API error:', err);
+    console.error('Mentions GET API error:', err);
     return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }

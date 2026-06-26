@@ -36,7 +36,7 @@ export interface Database {
         Row: {
           id: string
           brand_id: string
-          platform: 'youtube' | 'instagram' | 'x' | 'linkedin' | 'csv_upload'
+          platform: 'youtube' | 'instagram' | 'x' | 'linkedin' | 'csv_upload' | 'web_listening'
           handle: string
           external_id: string | null
           created_at: string
@@ -44,7 +44,7 @@ export interface Database {
         Insert: {
           id?: string
           brand_id: string
-          platform: 'youtube' | 'instagram' | 'x' | 'linkedin' | 'csv_upload'
+          platform: 'youtube' | 'instagram' | 'x' | 'linkedin' | 'csv_upload' | 'web_listening'
           handle: string
           external_id?: string | null
           created_at?: string
@@ -52,7 +52,7 @@ export interface Database {
         Update: {
           id?: string
           brand_id?: string
-          platform?: 'youtube' | 'instagram' | 'x' | 'linkedin' | 'csv_upload'
+          platform?: 'youtube' | 'instagram' | 'x' | 'linkedin' | 'csv_upload' | 'web_listening'
           handle?: string
           external_id?: string | null
           created_at?: string
@@ -198,6 +198,70 @@ export interface Database {
           prompt?: string | null
           summary_markdown?: string
           raw_json?: Json
+          created_at?: string
+        }
+      }
+      mentions: {
+        Row: {
+          id: string
+          brand_id: string
+          platform: 'reddit' | 'youtube' | 'x' | 'blogs' | 'news' | 'web'
+          url: string | null
+          author: string | null
+          content_text: string
+          sentiment: 'positive' | 'neutral' | 'negative'
+          sentiment_score: number
+          published_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          brand_id: string
+          platform: 'reddit' | 'youtube' | 'x' | 'blogs' | 'news' | 'web'
+          url?: string | null
+          author?: string | null
+          content_text: string
+          sentiment: 'positive' | 'neutral' | 'negative'
+          sentiment_score?: number
+          published_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          brand_id?: string
+          platform?: 'reddit' | 'youtube' | 'x' | 'blogs' | 'news' | 'web'
+          url?: string | null
+          author?: string | null
+          content_text?: string
+          sentiment?: 'positive' | 'neutral' | 'negative'
+          sentiment_score?: number
+          published_at?: string
+          created_at?: string
+        }
+      }
+      brand_recommendations: {
+        Row: {
+          id: string
+          brand_id: string
+          category: 'reach' | 'sentiment' | 'branding'
+          recommendation_text: string
+          priority: 'high' | 'medium' | 'low'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          brand_id: string
+          category: 'reach' | 'sentiment' | 'branding'
+          recommendation_text: string
+          priority: 'high' | 'medium' | 'low'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          brand_id?: string
+          category?: 'reach' | 'sentiment' | 'branding'
+          recommendation_text?: string
+          priority?: 'high' | 'medium' | 'low'
           created_at?: string
         }
       }

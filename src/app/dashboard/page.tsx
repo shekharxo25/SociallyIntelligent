@@ -3,15 +3,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   BarChart3, 
-  BookOpen, 
-  Calendar, 
   MessageSquare, 
   Plus, 
   RotateCw, 
   Search, 
   Sparkles, 
   TrendingUp, 
-  Upload, 
   Users, 
   Video, 
   ChevronDown, 
@@ -21,9 +18,14 @@ import {
   AlertTriangle,
   Info,
   ExternalLink,
-  Bot,
-  RefreshCw,
-  Clock
+  MessageCircle,
+  Globe,
+  Radio,
+  FileSearch,
+  CheckCircle2,
+  TrendingDown,
+  Clock,
+  Bot
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -42,6 +44,7 @@ import {
   Cell 
 } from 'recharts';
 
+// Custom YouTube Icon SVG
 const Youtube = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     viewBox="0 0 24 24"
@@ -59,48 +62,43 @@ export default function Dashboard() {
   const [brands, setBrands] = useState<any[]>([]);
   const [selectedBrand, setSelectedBrand] = useState<any>(null);
   const [isBrandDropdownOpen, setIsBrandDropdownOpen] = useState(false);
-  const [isAddingBrand, setIsAddingBrand] = useState(false);
-  const [newBrandName, setNewBrandName] = useState('');
-  const [newBrandIndustry, setNewBrandIndustry] = useState('');
+  
+  // Audit Modal/Form
+  const [isAuditing, setIsAuditing] = useState(false);
+  const [auditBrandName, setAuditBrandName] = useState('');
+  const [auditIndustry, setAuditIndustry] = useState('');
+  const [auditSuccess, setAuditSuccess] = useState<string | null>(null);
 
   // Dashboard Navigation
-  const [activeTab, setActiveTab] = useState<'overview' | 'content' | 'audience' | 'insights'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'mentions' | 'audience' | 'insights'>('overview');
   const [timeRange, setTimeRange] = useState('7d');
 
   // API Data States
   const [overviewData, setOverviewData] = useState<any>(null);
-  const [contentData, setContentData] = useState<any>(null);
+  const [mentionsData, setMentionsData] = useState<any>(null);
   const [audienceData, setAudienceData] = useState<any>(null);
   const [aiInsight, setAiInsight] = useState<string>('');
+  const [recommendations, setRecommendations] = useState<any[]>([]);
   
   // Loading States
   const [isLoadingOverview, setIsLoadingOverview] = useState(false);
-  const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [isLoadingMentions, setIsLoadingMentions] = useState(false);
   const [isLoadingAudience, setIsLoadingAudience] = useState(false);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
-  const [isUploadingCSV, setIsUploadingCSV] = useState(false);
-
-  // Ingestion Modal
-  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
-  const [ytChannelHandle, setYtChannelHandle] = useState('');
-  const [ytChannelId, setYtChannelId] = useState('');
-  const [isConnectingYT, setIsConnectingYT] = useState(false);
-
-  // CSV State
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
 
   // AI Chat States
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState<any[]>([
-    { role: 'assistant', text: 'Hello! I am SociallyIntelligent AI. Ask me details about your content performance, sentiment, or audience engagement trends.' }
+    { role: 'assistant', text: 'Welcome! I am your SociallyIntelligent assistant. Ask me anything about your brand\'s sentiment, customer opinions, or suggestions to improve perception.' }
   ]);
   const [isChatSending, setIsChatSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Search/Filters for Content
-  const [contentSearch, setContentSearch] = useState('');
-  const [contentSort, setContentSort] = useState('views-desc');
+  // Search/Filters for Mentions
+  const [mentionsSearch, setMentionsSearch] = useState('');
+  const [mentionsFilterPlatform, setMentionsFilterPlatform] = useState('all');
+  const [mentionsFilterSentiment, setMentionsFilterSentiment] = useState('all');
+  const [mentionsSort, setMentionsSort] = useState('date-desc');
 
   // Load initial brands
   useEffect(() => {
@@ -111,7 +109,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (selectedBrand) {
       fetchOverviewData();
-      fetchContentData();
+      fetchMentionsData();
       fetchAudienceData();
       fetchAIInsight();
     }
@@ -122,39 +120,52 @@ export default function Dashboard() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
-  const fetchBrands = async () => {
+  const fetchBrands = async (selectNewId?: string) => {
     try {
       const res = await fetch('/api/brands');
       const data = await res.json();
       setBrands(data);
       if (data.length > 0) {
-        setSelectedBrand(data[0]);
+        if (selectNewId) {
+          const match = data.find((b: any) => b.id === selectNewId);
+          setSelectedBrand(match || data[0]);
+        } else if (!selectedBrand) {
+          setSelectedBrand(data[0]);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch brands:', err);
     }
   };
 
-  const handleAddBrand = async (e: React.FormEvent) => {
+  const handleAuditBrand = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newBrandName.trim()) return;
+    if (!auditBrandName.trim()) return;
+
+    setIsAuditing(true);
+    setAuditSuccess(null);
 
     try {
-      const res = await fetch('/api/brands', {
+      const res = await fetch('/api/brands/audit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newBrandName, industry: newBrandIndustry }),
+        body: JSON.stringify({ brandName: auditBrandName, industry: auditIndustry }),
       });
       const data = await res.json();
       if (res.ok) {
-        setBrands([...brands, data]);
-        setSelectedBrand(data);
-        setIsAddingBrand(false);
-        setNewBrandName('');
-        setNewBrandIndustry('');
+        setAuditSuccess(`Audit complete! Crawled ${data.mentionsCount} mentions.`);
+        await fetchBrands(data.brandId);
+        setAuditBrandName('');
+        setAuditIndustry('');
+        setTimeout(() => setAuditSuccess(null), 3000);
+      } else {
+        setAuditSuccess(`Error: ${data.error}`);
       }
     } catch (err) {
-      console.error('Failed to create brand:', err);
+      console.error('Audit failed:', err);
+      setAuditSuccess('Audit sweep failed.');
+    } finally {
+      setIsAuditing(false);
     }
   };
 
@@ -172,17 +183,17 @@ export default function Dashboard() {
     }
   };
 
-  const fetchContentData = async () => {
+  const fetchMentionsData = async () => {
     if (!selectedBrand) return;
-    setIsLoadingContent(true);
+    setIsLoadingMentions(true);
     try {
       const res = await fetch(`/api/brands/${selectedBrand.id}/content?range=${timeRange}`);
       const data = await res.json();
-      setContentData(data);
+      setMentionsData(data);
     } catch (err) {
-      console.error('Content fetch error:', err);
+      console.error('Mentions fetch error:', err);
     } finally {
-      setIsLoadingContent(false);
+      setIsLoadingMentions(false);
     }
   };
 
@@ -211,62 +222,20 @@ export default function Dashboard() {
       });
       const data = await res.json();
       setAiInsight(data.summary_markdown || '');
+      
+      if (data.raw_json?.recommendations) {
+        setRecommendations(data.raw_json.recommendations);
+      } else {
+        setRecommendations([
+          { category: 'reach', recommendation_text: `Increase your presence on Reddit. There is active discussion regarding ${selectedBrand.name} in r/startups and r/saas, but no official team response.`, priority: 'high' },
+          { category: 'sentiment', recommendation_text: `Address setup friction. Updating the onboarding documentation or adding check-in guides will reduce installation timeout errors.`, priority: 'medium' },
+          { category: 'branding', recommendation_text: `Highlight dashboard visual design. Share build-in-public design snapshots to drive X engagement.`, priority: 'low' }
+        ]);
+      }
     } catch (err) {
       console.error('AI insight error:', err);
     } finally {
       setIsLoadingAI(false);
-    }
-  };
-
-  const handleConnectYouTube = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!ytChannelHandle || !ytChannelId) return;
-
-    setIsConnectingYT(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      await fetchOverviewData();
-      setIsConnectModalOpen(false);
-      setYtChannelHandle('');
-      setYtChannelId('');
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsConnectingYT(false);
-    }
-  };
-
-  const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedBrand) return;
-
-    setIsUploadingCSV(true);
-    setUploadMessage(null);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('brandId', selectedBrand.id);
-
-    try {
-      const res = await fetch('/api/uploads/csv', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setUploadMessage(`Success! ${data.message}`);
-        fetchOverviewData();
-        fetchContentData();
-        fetchAudienceData();
-        fetchAIInsight(true);
-      } else {
-        setUploadMessage(`Error: ${data.error}`);
-      }
-    } catch (err) {
-      console.error(err);
-      setUploadMessage('Upload failed.');
-    } finally {
-      setIsUploadingCSV(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -288,27 +257,29 @@ export default function Dashboard() {
       const data = await res.json();
       setChatMessages((prev) => [...prev, { role: 'assistant', text: data.answer || 'No response.' }]);
     } catch (err) {
-      setChatMessages((prev) => [...prev, { role: 'assistant', text: 'Error querying AI engine. Please verify GEMINI_API_KEY.' }]);
+      setChatMessages((prev) => [...prev, { role: 'assistant', text: 'Error querying AI agent.' }]);
     } finally {
       setIsChatSending(false);
     }
   };
 
-  // Filter & Sort Posts
-  const filteredPosts = contentData?.posts?.filter((post: any) => {
-    return post.content_text?.toLowerCase().includes(contentSearch.toLowerCase()) ||
-           post.hashtags?.some((h: string) => h.toLowerCase().includes(contentSearch.toLowerCase()));
+  // Filter & Sort Mentions
+  const filteredMentions = mentionsData?.posts?.filter((m: any) => {
+    const matchesSearch = m.content_text?.toLowerCase().includes(mentionsSearch.toLowerCase()) ||
+                          m.author?.toLowerCase().includes(mentionsSearch.toLowerCase());
+    const matchesPlatform = mentionsFilterPlatform === 'all' || m.platform === mentionsFilterPlatform;
+    const matchesSentiment = mentionsFilterSentiment === 'all' || m.sentiment === mentionsFilterSentiment;
+    return matchesSearch && matchesPlatform && matchesSentiment;
   }) || [];
 
-  const sortedPosts = [...filteredPosts].sort((a: any, b: any) => {
-    if (contentSort === 'views-desc') return b.metrics.views - a.metrics.views;
-    if (contentSort === 'views-asc') return a.metrics.views - b.metrics.views;
-    if (contentSort === 'eng-desc') return b.metrics.engagementRate - a.metrics.engagementRate;
-    if (contentSort === 'date-desc') return new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime();
+  const sortedMentions = [...filteredMentions].sort((a: any, b: any) => {
+    if (mentionsSort === 'date-desc') return new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime();
+    if (mentionsSort === 'sentiment-desc') return b.sentiment_score - a.sentiment_score;
+    if (mentionsSort === 'sentiment-asc') return a.sentiment_score - b.sentiment_score;
     return 0;
   });
 
-  // Sentiment Distribution Colors
+  // Recharts parameters
   const COLORS = ['#0d9488', '#eab308', '#ef4444'];
   const sentimentDistribution = audienceData?.sentiment?.distribution 
     ? [
@@ -317,6 +288,17 @@ export default function Dashboard() {
         { name: 'Negative', value: audienceData.sentiment.distribution.negative }
       ]
     : [];
+
+  const getPlatformIcon = (platform: string) => {
+    switch (platform) {
+      case 'reddit': return <MessageCircle className="h-3.5 w-3.5 text-orange-500" />;
+      case 'youtube': return <Youtube className="h-3.5 w-3.5 text-rose-500" />;
+      case 'x': return <span className="font-bold text-[10px] text-gray-400 font-mono">X</span>;
+      case 'blogs': return <FileText className="h-3.5 w-3.5 text-sky-400" />;
+      case 'news': return <Globe className="h-3.5 w-3.5 text-emerald-400" />;
+      default: return <Radio className="h-3.5 w-3.5 text-gray-400" />;
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-[#030305] text-[#e2e8f0] tech-grid relative">
@@ -342,7 +324,7 @@ export default function Dashboard() {
               </span>
             </div>
             <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-indigo-950/60 text-indigo-300 border border-indigo-900/60 ml-auto">
-              PRO
+              AGENT
             </span>
           </div>
 
@@ -353,38 +335,30 @@ export default function Dashboard() {
               className="w-full flex items-center justify-between gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.06] hover:border-indigo-500/30 transition-all duration-300 text-sm font-medium"
             >
               <div className="truncate text-left">
-                <span className="block text-[9px] text-gray-500 uppercase tracking-widest font-mono">WORKSPACE</span>
-                <span className="truncate block mt-0.5 text-white font-semibold">{selectedBrand?.name || 'Select Workspace'}</span>
+                <span className="block text-[9px] text-gray-500 uppercase tracking-widest font-mono">AUDITED BRAND</span>
+                <span className="truncate block mt-0.5 text-white font-semibold">{selectedBrand?.name || 'Create Brand...'}</span>
               </div>
               <ChevronDown className="h-4 w-4 text-gray-400" />
             </button>
 
             {isBrandDropdownOpen && (
               <div className="absolute top-full left-0 right-0 z-50 mt-2 p-1.5 rounded-xl bg-[#09090d] border border-white/[0.06] shadow-[0_10px_40px_rgba(0,0,0,0.5)] animate-fade-in">
-                {brands.map((b) => (
-                  <button
-                    key={b.id}
-                    onClick={() => {
-                      setSelectedBrand(b);
-                      setIsBrandDropdownOpen(false);
-                    }}
-                    className={`w-full text-left p-2.5 rounded-lg text-xs hover:bg-white/[0.04] transition-colors ${selectedBrand?.id === b.id ? 'bg-white/[0.03] text-teal-400 font-semibold' : 'text-gray-400'}`}
-                  >
-                    {b.name}
-                  </button>
-                ))}
-                <div className="border-t border-white/[0.06] mt-2 pt-2">
-                  <button
-                    onClick={() => {
-                      setIsAddingBrand(true);
-                      setIsBrandDropdownOpen(false);
-                    }}
-                    className="w-full flex items-center justify-center gap-1.5 p-2 rounded-lg text-xs text-indigo-400 hover:bg-indigo-500/10 font-semibold transition"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    New Workspace
-                  </button>
-                </div>
+                {brands.length === 0 ? (
+                  <p className="text-[10px] text-gray-500 p-2 text-center">No brands audited yet</p>
+                ) : (
+                  brands.map((b) => (
+                    <button
+                      key={b.id}
+                      onClick={() => {
+                        setSelectedBrand(b);
+                        setIsBrandDropdownOpen(false);
+                      }}
+                      className={`w-full text-left p-2.5 rounded-lg text-xs hover:bg-white/[0.04] transition-colors ${selectedBrand?.id === b.id ? 'bg-white/[0.03] text-teal-400 font-semibold' : 'text-gray-400'}`}
+                    >
+                      {b.name}
+                    </button>
+                  ))
+                )}
               </div>
             )}
           </div>
@@ -392,10 +366,10 @@ export default function Dashboard() {
           {/* Navigation Links */}
           <nav className="space-y-1.5">
             {[
-              { id: 'overview', label: 'Overview', icon: BarChart3 },
-              { id: 'content', label: 'Content Insights', icon: Video },
-              { id: 'audience', label: 'Audience Dynamics', icon: Users },
-              { id: 'insights', label: 'Cognitive Engine', icon: Sparkles }
+              { id: 'overview', label: 'Overview Audit', icon: BarChart3 },
+              { id: 'mentions', label: 'Mentions Explorer', icon: MessageSquare },
+              { id: 'audience', label: 'Platforms & Buzz', icon: Radio },
+              { id: 'insights', label: 'AI Suggestions', icon: Sparkles }
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -413,34 +387,47 @@ export default function Dashboard() {
           </nav>
         </div>
 
-        {/* Data Source Configuration */}
-        <div className="space-y-2 mt-8 pt-5 border-t border-white/[0.06]">
-          <span className="block text-[9px] text-gray-500 uppercase tracking-widest font-mono mb-2 text-center">INTEGRATIONS</span>
-          <button
-            onClick={() => setIsConnectModalOpen(true)}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:text-rose-300 text-xs font-semibold transition duration-300"
-          >
-            <Youtube className="h-3.5 w-3.5" />
-            YouTube Ingestion
-          </button>
-          
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploadingCSV}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.06] hover:border-white/[0.1] text-xs font-semibold text-gray-300 transition duration-300 disabled:opacity-50"
-          >
-            {isUploadingCSV ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5 text-gray-400" />}
-            Upload CSV Source
-          </button>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleCSVUpload} 
-            accept=".csv" 
-            className="hidden" 
-          />
-          {uploadMessage && (
-            <p className="text-[10px] text-center text-teal-400 mt-2 bg-teal-950/20 border border-teal-900/50 p-2 rounded-lg font-mono animate-fade-in">{uploadMessage}</p>
+        {/* Brand Ingestion Actions: Form directly in sidebar */}
+        <div className="pt-4 border-t border-white/[0.06] mt-8">
+          <span className="block text-[9px] text-gray-500 uppercase tracking-widest font-mono mb-2.5 px-1">Audit New Brand</span>
+          <form onSubmit={handleAuditBrand} className="space-y-2">
+            <input
+              type="text"
+              required
+              disabled={isAuditing}
+              placeholder="Brand Name (e.g. Supabase)"
+              value={auditBrandName}
+              onChange={(e) => setAuditBrandName(e.target.value)}
+              className="w-full bg-[#08080c] border border-white/[0.04] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition duration-300 placeholder-gray-600 font-medium"
+            />
+            <input
+              type="text"
+              disabled={isAuditing}
+              placeholder="Industry (e.g. Tech)"
+              value={auditIndustry}
+              onChange={(e) => setAuditIndustry(e.target.value)}
+              className="w-full bg-[#08080c] border border-white/[0.04] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition duration-300 placeholder-gray-600 font-medium"
+            />
+            <button
+              type="submit"
+              disabled={isAuditing || !auditBrandName.trim()}
+              className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 hover:shadow-[0_0_15px_rgba(99,102,241,0.3)] text-white text-xs font-semibold transition disabled:opacity-50 duration-300"
+            >
+              {isAuditing ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Auditing Web...
+                </>
+              ) : (
+                <>
+                  <FileSearch className="h-4 w-4" />
+                  Audit Brand
+                </>
+              )}
+            </button>
+          </form>
+          {auditSuccess && (
+            <p className="text-[10px] text-center text-teal-400 mt-2 bg-teal-950/20 border border-teal-900/50 p-2 rounded-lg font-mono animate-fade-in">{auditSuccess}</p>
           )}
         </div>
       </aside>
@@ -451,10 +438,12 @@ export default function Dashboard() {
         {/* Sleek Minimalist Header */}
         <header className="h-20 px-8 flex items-center justify-between shrink-0 bg-transparent border-b border-white/[0.04] backdrop-blur-md">
           <div className="flex items-center gap-3">
-            <span className="text-sm font-bold text-white display-font tracking-wide uppercase">{activeTab} Metrics</span>
+            <span className="text-sm font-bold text-white display-font tracking-wide uppercase">
+              {activeTab === 'mentions' ? 'Mentions' : activeTab} Metrics
+            </span>
             <span className="text-xs text-white/10 font-light">|</span>
-            <span className="text-[10px] text-teal-400 font-mono font-bold tracking-widest uppercase border border-teal-500/20 px-2 py-0.5 rounded-full bg-teal-950/20">
-              {selectedBrand?.industry || 'Unspecified Industry'}
+            <span className="text-[10px] text-teal-400 font-mono font-bold tracking-widest uppercase border border-teal-500/20 px-2.5 py-0.5 rounded-full bg-teal-950/20">
+              Active Audit: {selectedBrand?.name || 'None'}
             </span>
           </div>
 
@@ -479,14 +468,14 @@ export default function Dashboard() {
             <button
               onClick={() => {
                 fetchOverviewData();
-                fetchContentData();
+                fetchMentionsData();
                 fetchAudienceData();
                 fetchAIInsight(true);
               }}
               className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04] text-gray-400 hover:text-white hover:border-indigo-500/30 transition-all duration-300"
-              title="Sync cognitive models"
+              title="Recrawl brand listening parameters"
             >
-              <RefreshCw className="h-4 w-4" />
+              <RotateCw className="h-4 w-4" />
             </button>
           </div>
         </header>
@@ -494,20 +483,18 @@ export default function Dashboard() {
         {/* Workspace Viewport */}
         <div className="flex-1 overflow-y-auto p-8 min-h-0">
           
-          {/* Demo Banner */}
-          {(!process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder')) && (
+          {/* Keyless Mode Alert */}
+          {(!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.includes('your-')) && (
             <div className="mb-8 p-4 rounded-2xl border border-yellow-500/20 bg-yellow-500/[0.02] text-yellow-400 text-xs flex items-center gap-3 animate-fade-in">
               <Info className="h-4.5 w-4.5 shrink-0 text-yellow-500" />
               <div className="leading-relaxed">
-                <span className="font-semibold text-white uppercase tracking-wider block text-[10px] mb-0.5">Sandboxed Mode</span>
-                Workspace is operating on seed data. To ingest live profiles, configure your Supabase variables in <code>.env.local</code>.
+                <span className="font-semibold text-white uppercase tracking-wider block text-[10px] mb-0.5">Demo Mode Sandbox</span>
+                GEMINI_API_KEY is not defined. We are simulating context-specific social listening mentions and recommendations. Populate the env variable to query actual Gemini models!
               </div>
             </div>
           )}
 
-          {/* TABS VIEWPORT */}
-
-          {/* ACTIVE TAB: OVERVIEW */}
+          {/* ACTIVE TAB: OVERVIEW AUDIT */}
           {activeTab === 'overview' && (
             <div className="space-y-8">
               {isLoadingOverview ? (
@@ -521,30 +508,30 @@ export default function Dashboard() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                     {[
                       { 
-                        title: 'Subscribers', 
-                        value: overviewData?.kpis?.subscribers?.value?.toLocaleString() || 0,
-                        delta: `${overviewData?.kpis?.subscribers?.change >= 0 ? '+' : ''}${overviewData?.kpis?.subscribers?.change?.toLocaleString()} (${overviewData?.kpis?.subscribers?.percentChange}%)`,
-                        deltaPositive: overviewData?.kpis?.subscribers?.change >= 0,
-                        icon: Users 
-                      },
-                      { 
-                        title: 'Visual Reach', 
-                        value: overviewData?.kpis?.views?.value?.toLocaleString() || 0,
-                        delta: `+${overviewData?.kpis?.views?.percentChange || 0}% vs last week`,
-                        deltaPositive: true,
-                        icon: Video 
-                      },
-                      { 
-                        title: 'Cognitive Signals', 
-                        value: overviewData?.kpis?.engagements?.value?.toLocaleString() || 0,
-                        delta: `+${overviewData?.kpis?.engagements?.percentChange || 0}% vs benchmark`,
+                        title: 'Total Web Mentions', 
+                        value: overviewData?.kpis?.mentions?.value || 0,
+                        delta: `+${overviewData?.kpis?.mentions?.change || 0} new posts this week`,
                         deltaPositive: true,
                         icon: MessageSquare 
                       },
                       { 
-                        title: 'Intelligent Friction', 
-                        value: `${overviewData?.kpis?.engagementRate?.value || 0}%`,
-                        delta: `+${overviewData?.kpis?.engagementRate?.percentChange || 0}% vs baseline`,
+                        title: 'Average Net Sentiment', 
+                        value: `${overviewData?.kpis?.avgSentiment?.value || 50}%`,
+                        delta: 'Healthy reputation index',
+                        deltaPositive: true,
+                        icon: Sparkles 
+                      },
+                      { 
+                        title: 'Primary Buzz Channel', 
+                        value: overviewData?.kpis?.primaryPlatform?.value || 'Reddit',
+                        delta: 'Platform with highest count',
+                        deltaPositive: true,
+                        icon: Radio 
+                      },
+                      { 
+                        title: 'Weekly Buzz Level', 
+                        value: overviewData?.kpis?.buzzIndex?.value || 'Low',
+                        delta: 'Mentions velocity check',
                         deltaPositive: true,
                         icon: TrendingUp 
                       }
@@ -559,7 +546,7 @@ export default function Dashboard() {
                             <span className="text-[10px] text-gray-500 uppercase tracking-widest font-mono font-semibold block">{kpi.title}</span>
                             <h3 className="text-2xl font-bold tracking-tight text-white mt-2 font-display">{kpi.value}</h3>
                             <span className={`text-[10px] font-semibold flex items-center gap-1 mt-2 ${kpi.deltaPositive ? 'text-teal-400' : 'text-rose-400'}`}>
-                              <Clock className="h-3 w-3" />
+                              <CheckCircle2 className="h-3 w-3" />
                               {kpi.delta}
                             </span>
                           </div>
@@ -573,11 +560,11 @@ export default function Dashboard() {
 
                   {/* Staggered Charts Layout */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* views / impressions Area Chart */}
+                    {/* Mentions Area Chart */}
                     <div className="p-6 rounded-2xl glass-panel animate-fade-in stagger-2 relative overflow-hidden">
                       <div className="flex items-center justify-between mb-6">
                         <div>
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-white">Reach Diagnostics</h4>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-white">Daily Crawled Mentions Volume</h4>
                           <span className="text-[10px] text-gray-500">Daily interaction and visual velocity</span>
                         </div>
                         <span className="h-2 w-2 rounded-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"></span>
@@ -586,42 +573,11 @@ export default function Dashboard() {
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={overviewData?.timeseries || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                             <defs>
-                              <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
+                              <linearGradient id="colorMentions" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="5%" stopColor="#6366F1" stopOpacity={0.2}/>
                                 <stop offset="95%" stopColor="#6366F1" stopOpacity={0}/>
                               </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.02)" />
-                            <XAxis dataKey="date" stroke="rgba(255,255,255,0.2)" fontSize={9} className="font-mono" />
-                            <YAxis stroke="rgba(255,255,255,0.2)" fontSize={9} className="font-mono" />
-                            <Tooltip 
-                              contentStyle={{ 
-                                backgroundColor: 'rgba(10, 10, 15, 0.9)', 
-                                borderColor: 'rgba(255, 255, 255, 0.06)', 
-                                borderRadius: '12px',
-                                color: '#FFF',
-                                fontSize: '11px',
-                                backdropFilter: 'blur(10px)'
-                              }} 
-                            />
-                            <Area type="monotone" dataKey="views" stroke="#6366F1" strokeWidth={2} fillOpacity={1} fill="url(#colorViews)" />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-
-                    {/* Subscriber Growth Chart */}
-                    <div className="p-6 rounded-2xl glass-panel animate-fade-in stagger-3 relative overflow-hidden">
-                      <div className="flex items-center justify-between mb-6">
-                        <div>
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-white">Growth Projection</h4>
-                          <span className="text-[10px] text-gray-500">Cumulative workspace network growth</span>
-                        </div>
-                        <span className="h-2 w-2 rounded-full bg-teal-400 shadow-[0_0_10px_rgba(14,179,158,0.5)]"></span>
-                      </div>
-                      <div className="h-72">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={overviewData?.timeseries || []} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.02)" />
                             <XAxis dataKey="date" stroke="rgba(255,255,255,0.2)" fontSize={9} className="font-mono" />
                             <YAxis stroke="rgba(255,255,255,0.2)" domain={['auto', 'auto']} fontSize={9} className="font-mono" />
@@ -635,7 +591,38 @@ export default function Dashboard() {
                                 backdropFilter: 'blur(10px)'
                               }} 
                             />
-                            <Line type="monotone" dataKey="followers" stroke="#0eb39e" strokeWidth={2.5} dot={{ r: 3, stroke: '#0eb39e', strokeWidth: 1 }} activeDot={{ r: 5 }} />
+                            <Area type="monotone" dataKey="mentions" stroke="#6366F1" strokeWidth={2} fillOpacity={1} fill="url(#colorMentions)" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Net Sentiment Timeseries */}
+                    <div className="p-6 rounded-2xl glass-panel animate-fade-in stagger-3 relative overflow-hidden">
+                      <div className="flex items-center justify-between mb-6">
+                        <div>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-white">Daily Sentiment Index Trend</h4>
+                          <span className="text-[10px] text-gray-500">Temporal variation in reputation polarity</span>
+                        </div>
+                        <span className="h-2 w-2 rounded-full bg-teal-400 shadow-[0_0_10px_rgba(14,179,158,0.5)]"></span>
+                      </div>
+                      <div className="h-72">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={overviewData?.timeseries || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.02)" />
+                            <XAxis dataKey="date" stroke="rgba(255,255,255,0.2)" fontSize={9} className="font-mono" />
+                            <YAxis stroke="rgba(255,255,255,0.2)" domain={[0, 1]} ticks={[0, 0.2, 0.4, 0.6, 0.8, 1.0]} fontSize={9} className="font-mono" />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: 'rgba(10, 10, 15, 0.9)', 
+                                borderColor: 'rgba(255, 255, 255, 0.06)', 
+                                borderRadius: '12px',
+                                color: '#FFF',
+                                fontSize: '11px',
+                                backdropFilter: 'blur(10px)'
+                              }} 
+                            />
+                            <Line type="monotone" dataKey="sentiment" stroke="#0eb39e" strokeWidth={2.5} dot={{ r: 3, stroke: '#0eb39e', strokeWidth: 1 }} activeDot={{ r: 5 }} />
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
@@ -646,103 +633,126 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ACTIVE TAB: CONTENT PERFORMANCE */}
-          {activeTab === 'content' && (
+          {/* ACTIVE TAB: MENTIONS EXPLORER */}
+          {activeTab === 'mentions' && (
             <div className="space-y-6">
-              {isLoadingContent ? (
+              {isLoadingMentions ? (
                 <div className="flex flex-col items-center justify-center py-28 gap-4 animate-pulse">
                   <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-                  <span className="text-xs text-gray-500 font-mono tracking-widest uppercase">Parsing feeds...</span>
+                  <span className="text-xs text-gray-500 font-mono tracking-widest uppercase">Scanning nodes...</span>
                 </div>
               ) : (
                 <>
                   {/* Search and Filters Bar */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl glass-panel animate-fade-in">
+                  <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 p-5 rounded-2xl glass-panel animate-fade-in">
                     <div className="relative flex-1">
                       <Search className="absolute left-3.5 top-3 h-4 w-4 text-gray-500" />
                       <input
                         type="text"
-                        placeholder="Filter content payload by label, tag, or copy..."
-                        value={contentSearch}
-                        onChange={(e) => setContentSearch(e.target.value)}
+                        placeholder="Search crawled mentions by username or keywords..."
+                        value={mentionsSearch}
+                        onChange={(e) => setMentionsSearch(e.target.value)}
                         className="w-full bg-[#08080c] border border-white/[0.04] rounded-xl pl-11 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition-all duration-300 font-medium"
                       />
                     </div>
 
-                    <div className="flex items-center gap-3.5">
-                      <span className="text-[10px] text-gray-500 font-mono uppercase tracking-widest">SORT ORDER</span>
-                      <select
-                        value={contentSort}
-                        onChange={(e) => setContentSort(e.target.value)}
-                        className="bg-[#08080c] border border-white/[0.04] rounded-xl px-4 py-2.5 text-xs font-semibold text-gray-300 focus:outline-none focus:border-indigo-500/50 transition-colors"
-                      >
-                        <option value="views-desc">Visual Reach: High to Low</option>
-                        <option value="views-asc">Visual Reach: Low to High</option>
-                        <option value="eng-desc">Interaction Quotient: High to Low</option>
-                        <option value="date-desc">Indexed Date: Newest First</option>
-                      </select>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div>
+                        <select
+                          value={mentionsFilterPlatform}
+                          onChange={(e) => setMentionsFilterPlatform(e.target.value)}
+                          className="bg-[#08080c] border border-white/[0.04] rounded-xl px-3 py-2.5 text-xs font-semibold text-gray-300 focus:outline-none focus:border-indigo-500/50 transition-colors"
+                        >
+                          <option value="all">All Platforms</option>
+                          <option value="reddit">Reddit</option>
+                          <option value="youtube">YouTube</option>
+                          <option value="x">X</option>
+                          <option value="blogs">Blogs</option>
+                          <option value="news">News</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <select
+                          value={mentionsFilterSentiment}
+                          onChange={(e) => setMentionsFilterSentiment(e.target.value)}
+                          className="bg-[#08080c] border border-white/[0.04] rounded-xl px-3 py-2.5 text-xs font-semibold text-gray-300 focus:outline-none focus:border-indigo-500/50 transition-colors"
+                        >
+                          <option value="all">All Sentiments</option>
+                          <option value="positive">Positive</option>
+                          <option value="neutral">Neutral</option>
+                          <option value="negative">Negative</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <select
+                          value={mentionsSort}
+                          onChange={(e) => setMentionsSort(e.target.value)}
+                          className="bg-[#08080c] border border-white/[0.04] rounded-xl px-3 py-2.5 text-xs font-semibold text-gray-300 focus:outline-none focus:border-indigo-500/50 transition-colors"
+                        >
+                          <option value="date-desc">Newest First</option>
+                          <option value="sentiment-desc">Sentiment: High to Low</option>
+                          <option value="sentiment-asc">Sentiment: Low to High</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Content Posts Table */}
+                  {/* Mentions Table Feed */}
                   <div className="rounded-2xl glass-panel overflow-hidden animate-fade-in stagger-2">
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
                           <tr className="border-b border-white/[0.04] text-gray-500 font-mono uppercase tracking-widest bg-white/[0.01]">
-                            <th className="p-5 font-semibold">Indexed Resource</th>
+                            <th className="p-5 font-semibold">Mention & Content</th>
                             <th className="p-5 font-semibold">Platform</th>
-                            <th className="p-5 font-semibold">Date Indexed</th>
-                            <th className="p-5 font-semibold text-right">Reach</th>
-                            <th className="p-5 font-semibold text-right">Likes</th>
-                            <th className="p-5 font-semibold text-right">Responses</th>
-                            <th className="p-5 font-semibold text-center">Friction Quotient</th>
+                            <th className="p-5 font-semibold">Author</th>
+                            <th className="p-5 font-semibold">Date Crawled</th>
+                            <th className="p-5 font-semibold">Sentiment Index</th>
+                            <th className="p-5 font-semibold">Sentiment Badge</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/[0.02]">
-                          {sortedPosts.length === 0 ? (
+                          {sortedMentions.length === 0 ? (
                             <tr>
-                              <td colSpan={7} className="p-10 text-center text-gray-500 font-medium">No resources located. Modify filter criteria.</td>
+                              <td colSpan={6} className="p-10 text-center text-gray-500 font-medium">No mentions found matching the active filters.</td>
                             </tr>
                           ) : (
-                            sortedPosts.map((post: any) => (
-                              <tr key={post.id} className="hover:bg-white/[0.02] transition-colors duration-300">
-                                <td className="p-5 max-w-sm">
-                                  <a 
-                                    href={post.url} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer" 
-                                    className="font-semibold text-white hover:text-indigo-400 hover:underline block truncate flex items-center gap-1.5"
-                                  >
-                                    {post.content_text}
-                                    <ExternalLink className="h-3 w-3 inline text-gray-500 shrink-0" />
-                                  </a>
-                                  <div className="flex flex-wrap gap-1 mt-2">
-                                    <span className="text-[9px] text-gray-400 bg-white/[0.02] border border-white/[0.04] px-2 py-0.5 rounded font-mono uppercase">
-                                      {post.content_type}
-                                    </span>
-                                    {post.hashtags?.map((tag: string) => (
-                                      <span key={tag} className="text-[9px] text-teal-400/80 font-mono">
-                                        #{tag}
-                                      </span>
-                                    ))}
+                            sortedMentions.map((m: any) => (
+                              <tr key={m.id} className="hover:bg-white/[0.02] transition-colors duration-300">
+                                <td className="p-5 max-w-lg">
+                                  <p className="text-gray-200 text-xs leading-relaxed italic">&ldquo;{m.content_text}&rdquo;</p>
+                                  <div className="mt-2.5">
+                                    <a 
+                                      href={m.url} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300 hover:underline"
+                                    >
+                                      View Original Link
+                                      <ExternalLink className="h-2.5 w-2.5" />
+                                    </a>
                                   </div>
                                 </td>
                                 <td className="p-5 capitalize">
-                                  <span className="inline-flex items-center gap-1.5 text-gray-300 font-semibold">
-                                    {post.platform === 'youtube' ? <Youtube className="h-3.5 w-3.5 text-rose-500" /> : <FileText className="h-3.5 w-3.5 text-gray-400" />}
-                                    {post.platform}
+                                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-white">
+                                    {getPlatformIcon(m.platform)}
+                                    {m.platform}
                                   </span>
                                 </td>
+                                <td className="p-5 text-gray-300 font-semibold">{m.author}</td>
                                 <td className="p-5 text-gray-400 font-mono">
-                                  {new Date(post.posted_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                                  {new Date(m.posted_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
                                 </td>
-                                <td className="p-5 text-white font-mono font-bold text-right">{post.metrics.views.toLocaleString()}</td>
-                                <td className="p-5 text-gray-400 font-mono text-right">{post.metrics.likes.toLocaleString()}</td>
-                                <td className="p-5 text-gray-400 font-mono text-right">{post.metrics.comments.toLocaleString()}</td>
-                                <td className="p-5 text-center">
-                                  <span className="inline-block text-[10px] font-bold font-mono px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                                    {post.metrics.engagementRate}%
+                                <td className="p-5 font-mono text-white font-bold">{(m.sentiment_score * 100).toFixed(0)}%</td>
+                                <td className="p-5">
+                                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border uppercase ${
+                                    m.sentiment === 'positive' ? 'bg-teal-500/10 text-teal-300 border-teal-500/20' : 
+                                    m.sentiment === 'negative' ? 'bg-rose-500/10 text-rose-300 border-rose-500/20' : 
+                                    'bg-white/[0.02] text-gray-400 border-white/[0.04]'
+                                  }`}>
+                                    {m.sentiment}
                                   </span>
                                 </td>
                               </tr>
@@ -757,7 +767,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ACTIVE TAB: AUDIENCE & SENTIMENT */}
+          {/* ACTIVE TAB: PLATFORMS & BUZZ */}
           {activeTab === 'audience' && (
             <div className="space-y-8">
               {isLoadingAudience ? (
@@ -771,8 +781,8 @@ export default function Dashboard() {
                     {/* Sentiment Share - Donut Chart */}
                     <div className="p-6 rounded-2xl glass-panel animate-fade-in flex flex-col justify-between relative overflow-hidden">
                       <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-white">Sentiment Balance</h4>
-                        <span className="text-[10px] text-gray-500">Distribution analysis of user interactions</span>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-white">Web Sentiment Summary</h4>
+                        <span className="text-[10px] text-gray-500">Aggregate perception score distribution</span>
                       </div>
 
                       {sentimentDistribution.length > 0 ? (
@@ -811,7 +821,7 @@ export default function Dashboard() {
                           </div>
                         </div>
                       ) : (
-                        <div className="h-48 flex items-center justify-center text-xs text-gray-500">No signals registered.</div>
+                        <div className="h-48 flex items-center justify-center text-xs text-gray-500">No sentiment parameters parsed.</div>
                       )}
 
                       {/* Legend */}
@@ -834,52 +844,50 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    {/* Sentiment Score over time */}
+                    {/* Mentions Share Chart */}
                     <div className="p-6 rounded-2xl glass-panel animate-fade-in stagger-2 lg:col-span-2 relative overflow-hidden">
                       <div className="flex items-center justify-between mb-6">
                         <div>
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-white">Sentiment Velocity</h4>
-                          <span className="text-[10px] text-gray-500">Temporal variation in positive polarity coefficient</span>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-white">Mentions Breakdown by Platform</h4>
+                          <span className="text-[10px] text-gray-500">Volumetric share of discussions</span>
                         </div>
-                        <span className="h-2 w-2 rounded-full bg-teal-400"></span>
+                        <span className="h-2 w-2 rounded-full bg-indigo-500"></span>
                       </div>
                       <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={audienceData?.sentiment?.timeseries || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                            <defs>
-                              <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#0d9488" stopOpacity={0.2}/>
-                                <stop offset="95%" stopColor="#0d9488" stopOpacity={0}/>
-                              </linearGradient>
-                            </defs>
+                          <BarChart data={mentionsData?.posts?.reduce((acc: any[], cur: any) => {
+                            const match = acc.find(a => a.name === cur.platform);
+                            if (match) match.value += 1;
+                            else acc.push({ name: cur.platform, value: 1 });
+                            return acc;
+                          }, []) || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="4 4" stroke="rgba(255,255,255,0.02)" />
-                            <XAxis dataKey="date" stroke="rgba(255,255,255,0.2)" fontSize={9} className="font-mono" />
-                            <YAxis stroke="rgba(255,255,255,0.2)" domain={[0, 1]} ticks={[0, 0.2, 0.4, 0.6, 0.8, 1.0]} fontSize={9} className="font-mono" />
+                            <XAxis dataKey="name" stroke="rgba(255,255,255,0.2)" fontSize={9} className="capitalize font-mono" />
+                            <YAxis stroke="rgba(255,255,255,0.2)" fontSize={9} className="font-mono" />
                             <Tooltip 
                               contentStyle={{ 
                                 backgroundColor: 'rgba(10, 10, 15, 0.9)', 
                                 borderColor: 'rgba(255, 255, 255, 0.06)', 
                                 borderRadius: '12px',
                                 color: '#FFF',
-                                fontSize: '11px',
-                                backdropFilter: 'blur(10px)'
+                                fontSize: '11px'
                               }} 
                             />
-                            <Area type="monotone" dataKey="score" stroke="#0d9488" strokeWidth={2.5} fillOpacity={1} fill="url(#colorScore)" />
-                          </AreaChart>
+                            <Bar dataKey="value" fill="#6366F1" radius={[6, 6, 0, 0]} />
+                          </BarChart>
                         </ResponsiveContainer>
                       </div>
                     </div>
                   </div>
 
-                  {/* Daily Subscriber Growth Bars */}
+                  {/* Daily Mentions volume bars */}
                   <div className="p-6 rounded-2xl glass-panel animate-fade-in stagger-3 relative overflow-hidden">
                     <div className="flex items-center justify-between mb-6">
                       <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-white">Daily Acquisition Index</h4>
-                        <span className="text-[10px] text-gray-500">Subscribers added per 24 hour interval</span>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-white">Daily Crawled Volume (Velocity)</h4>
+                        <span className="text-[10px] text-gray-500">Crawled mentions added per 24 hour interval</span>
                       </div>
-                      <span className="h-2 w-2 rounded-full bg-indigo-500"></span>
+                      <span className="h-2 w-2 rounded-full bg-teal-400"></span>
                     </div>
                     <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
@@ -913,21 +921,21 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ACTIVE TAB: COGNITIVE ENGINE (AI INSIGHTS & QA) */}
+          {/* ACTIVE TAB: AI SUGGESTIONS */}
           {activeTab === 'insights' && (
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start animate-fade-in">
-              {/* Left 3 Cols: AI Markdown Insight */}
+              {/* Left 3 Cols: AI Markdown Audit Summary & Recommendations */}
               <div className="lg:col-span-3 space-y-6">
+                
+                {/* 1. Markdown summary */}
                 <div className="p-6 rounded-2xl glass-panel relative overflow-hidden border border-indigo-500/10">
-                  
-                  {/* Glowing Radial Mesh */}
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgba(99,102,241,0.05),transparent_45%)] pointer-events-none" />
 
                   <div className="flex items-center justify-between border-b border-white/[0.04] pb-5 mb-5 relative z-10">
                     <div className="flex items-center gap-2.5">
                       <Sparkles className="h-5 w-5 text-indigo-400 animate-pulse" />
                       <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-white">Synthesized Analytical Reports</h4>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-white">AI Web Listening Brand Audit</h4>
                         <p className="text-[9px] text-gray-500">Weekly automated cognitive diagnostics</p>
                       </div>
                     </div>
@@ -937,7 +945,7 @@ export default function Dashboard() {
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.06] hover:border-indigo-500/20 text-xs font-bold transition text-indigo-300 disabled:opacity-50"
                     >
                       {isLoadingAI ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
-                      Synthesize
+                      Regenerate
                     </button>
                   </div>
 
@@ -945,15 +953,50 @@ export default function Dashboard() {
                     {isLoadingAI ? (
                       <div className="py-24 flex flex-col items-center justify-center gap-4">
                         <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
-                        <span className="text-xs text-gray-500 font-mono tracking-widest uppercase">Compiling telemetry...</span>
+                        <span className="text-xs text-gray-500 font-mono tracking-widest uppercase">Analyzing crawled mentions...</span>
                       </div>
                     ) : (
                       <div className="prose prose-invert prose-xs max-w-none text-gray-300 whitespace-pre-line leading-relaxed text-xs">
-                        {aiInsight || "No telemetry aggregated. Initiate synthesize operation to pull cognitive metrics."}
+                        {aiInsight || "Launch an audit search in the sidebar to generate AI reports."}
                       </div>
                     )}
                   </div>
                 </div>
+
+                {/* 2. Structured recommendations */}
+                <div className="p-6 rounded-2xl glass-panel relative overflow-hidden">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-white mb-5">Actionable Social Media Audit Actions</h4>
+                  
+                  <div className="space-y-3">
+                    {recommendations.length === 0 ? (
+                      <p className="text-xs text-gray-500 text-center py-8">No suggestions generated yet.</p>
+                    ) : (
+                      recommendations.map((rec: any, idx: number) => (
+                        <div 
+                          key={idx} 
+                          className="p-4 rounded-xl border border-white/[0.04] bg-white/[0.01] flex items-start gap-4 justify-between hover:border-white/[0.08] transition-all duration-300"
+                        >
+                          <div className="space-y-1">
+                            <span className="text-[9px] uppercase font-bold text-indigo-400 tracking-wider font-mono">
+                              Category: {rec.category}
+                            </span>
+                            <p className="text-xs text-gray-300 leading-relaxed font-normal">
+                              {rec.recommendation_text}
+                            </p>
+                          </div>
+                          <span className={`text-[8px] font-bold uppercase px-2 py-0.5 rounded border shrink-0 font-mono ${
+                            rec.priority === 'high' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                            rec.priority === 'medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+                            'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                          }`}>
+                            {rec.priority}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
               </div>
 
               {/* Right 2 Cols: Grounded Chat Assistant */}
@@ -965,8 +1008,8 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2">
                       <Bot className="h-4.5 w-4.5 text-teal-400" />
                       <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-white">Cognitive Assistant</h4>
-                        <p className="text-[9px] text-gray-500">Query platform database directly</p>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-white">Grounded Audit Assistant</h4>
+                        <p className="text-[9px] text-gray-500">Ask about crawled opinions & topics</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -997,7 +1040,7 @@ export default function Dashboard() {
                       <div className="flex justify-start">
                         <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl rounded-tl-none p-3.5 text-xs flex items-center gap-2 text-gray-400">
                           <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-400" />
-                          Indexing platform metrics...
+                          Consulting audit data...
                         </div>
                       </div>
                     )}
@@ -1008,7 +1051,7 @@ export default function Dashboard() {
                   <form onSubmit={handleSendChatMessage} className="p-4 border-t border-white/[0.04] bg-[#07070a]/30 flex gap-2.5">
                     <input
                       type="text"
-                      placeholder="Ask concerning engagement, view spikes, etc..."
+                      placeholder="e.g., What are users complaining about?"
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
                       disabled={isChatSending}
@@ -1029,115 +1072,6 @@ export default function Dashboard() {
 
         </div>
       </main>
-
-      {/* 3. MODAL: ADD BRAND (FORM) */}
-      {isAddingBrand && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
-          <div className="w-full max-w-sm rounded-2xl border border-white/[0.06] bg-[#08080c] p-6 shadow-3xl relative">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-[40px] pointer-events-none" />
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-5 display-font">Initialize New Workspace</h3>
-            <form onSubmit={handleAddBrand} className="space-y-4">
-              <div>
-                <label className="block text-[9px] text-gray-500 font-semibold uppercase tracking-wider font-mono mb-1.5">Workspace Label *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. SociallyIntelligent Lab"
-                  value={newBrandName}
-                  onChange={(e) => setNewBrandName(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-white/[0.04] rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[9px] text-gray-500 font-semibold uppercase tracking-wider font-mono mb-1.5">Industry Segment</label>
-                <input
-                  type="text"
-                  placeholder="e.g. AI SaaS, Creative Agency"
-                  value={newBrandIndustry}
-                  onChange={(e) => setNewBrandIndustry(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-white/[0.04] rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition"
-                />
-              </div>
-
-              <div className="flex gap-2 justify-end pt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsAddingBrand(false)}
-                  className="px-4 py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04] text-gray-400 hover:text-white text-xs font-semibold transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 hover:shadow-[0_0_15px_rgba(99,102,241,0.3)] text-white text-xs font-semibold transition"
-                >
-                  Provision
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 4. MODAL: CONNECT YOUTUBE */}
-      {isConnectModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
-          <div className="w-full max-w-sm rounded-2xl border border-white/[0.06] bg-[#08080c] p-6 shadow-3xl relative">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/5 rounded-full blur-[40px] pointer-events-none" />
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-2 flex items-center gap-2 display-font">
-              <Youtube className="h-5 w-5 text-rose-500" />
-              Configure YouTube Pipe
-            </h3>
-            <p className="text-[10px] text-gray-500 mb-5 leading-relaxed font-medium">
-              Specify channel handle and external identifier. Background workers index engagement matrices daily.
-            </p>
-            <form onSubmit={handleConnectYouTube} className="space-y-4">
-              <div>
-                <label className="block text-[9px] text-gray-500 font-semibold uppercase tracking-wider font-mono mb-1.5">Channel Handle *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. @GoogleDeepMind"
-                  value={ytChannelHandle}
-                  onChange={(e) => setYtChannelHandle(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-white/[0.04] rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[9px] text-gray-500 font-semibold uppercase tracking-wider font-mono mb-1.5">Channel ID (External ID) *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. UCxOQ3DkcsbYNE6H8uQQuVA"
-                  value={ytChannelId}
-                  onChange={(e) => setYtChannelId(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-white/[0.04] rounded-xl px-3.5 py-3 text-xs text-white focus:outline-none focus:border-indigo-500/50 transition"
-                />
-              </div>
-
-              <div className="flex gap-2 justify-end pt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsConnectModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04] text-gray-400 hover:text-white text-xs font-semibold transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isConnectingYT}
-                  className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)] text-white text-xs font-semibold transition disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  {isConnectingYT && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  Establish Pipe
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
     </div>
   );

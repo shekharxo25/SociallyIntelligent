@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
-// Generates 7 days of timeseries data for mock fallback
 const getMockOverview = (brandId: string) => {
-  const isAlt = brandId.startsWith('22222222');
-  const mult = isAlt ? 0.4 : 1.0;
-  
   const dates = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
@@ -13,34 +9,20 @@ const getMockOverview = (brandId: string) => {
     dates.push(d.toISOString().split('T')[0]);
   }
 
-  const timeseries = dates.map((date, idx) => {
-    const baseFollowers = isAlt ? 2500 : 15300;
-    const baseViews = isAlt ? 800 : 4200;
-    const baseEngagements = isAlt ? 90 : 310;
-    
-    return {
-      date,
-      followers: Math.round((baseFollowers + idx * 25 * (isAlt ? 1.5 : 1)) * mult),
-      views: Math.round((baseViews + Math.sin(idx) * 600 + (idx === 4 ? 2000 : 0)) * mult),
-      engagements: Math.round((baseEngagements + Math.sin(idx) * 50 + (idx === 4 ? 180 : 0)) * mult),
-    };
-  });
+  const timeseries = dates.map((date, idx) => ({
+    date,
+    mentions: Math.round(5 + Math.sin(idx) * 3 + (idx === 4 ? 6 : 0)),
+    sentiment: parseFloat((0.72 + Math.sin(idx * 0.5) * 0.05).toFixed(2))
+  }));
 
-  const currentFollowers = timeseries[timeseries.length - 1].followers;
-  const prevFollowers = timeseries[0].followers;
-  const followerChange = currentFollowers - prevFollowers;
-  const followerChangePercent = (followerChange / prevFollowers) * 100;
-
-  const totalViews = timeseries.reduce((acc, t) => acc + t.views, 0);
-  const totalEngagements = timeseries.reduce((acc, t) => acc + t.engagements, 0);
-  const avgEngagementRate = totalViews > 0 ? (totalEngagements / totalViews) * 100 : 0;
+  const totalMentions = timeseries.reduce((acc, t) => acc + t.mentions, 0);
 
   return {
     kpis: {
-      subscribers: { value: currentFollowers, change: followerChange, percentChange: parseFloat(followerChangePercent.toFixed(2)) },
-      views: { value: totalViews, change: Math.round(totalViews * 0.12), percentChange: 12.0 },
-      engagements: { value: totalEngagements, change: Math.round(totalEngagements * 0.08), percentChange: 8.0 },
-      engagementRate: { value: parseFloat(avgEngagementRate.toFixed(2)), change: 0.35, percentChange: 5.2 }
+      mentions: { value: totalMentions, change: 8, percentChange: 12.5 },
+      avgSentiment: { value: 76, change: 4, percentChange: 5.5 },
+      primaryPlatform: { value: 'Reddit', change: 0, percentChange: 0 },
+      buzzIndex: { value: 'High', change: 0, percentChange: 0 }
     },
     timeseries
   };
@@ -57,7 +39,7 @@ export async function GET(
     const isMockMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
                        process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
 
-    if (isMockMode) {
+    if (isMockMode || brandId.startsWith('demo-')) {
       return NextResponse.json(getMockOverview(brandId));
     }
 
@@ -66,102 +48,76 @@ export async function GET(
       return NextResponse.json(getMockOverview(brandId));
     }
 
-    // Check if user owns the brand
-    const { data: brand, error: brandError } = await supabase
-      .from('brands')
-      .select('id')
-      .eq('id', brandId)
-      .single();
-
-    if (brandError || !brand) {
-      return NextResponse.json({ error: 'Brand not found or access denied' }, { status: 404 });
-    }
-
-    // Get platform accounts linked to the brand
-    const { data: accounts, error: accountsError } = await supabase
-      .from('platform_accounts')
-      .select('id')
+    // Fetch brand mentions
+    const { data: mentions, error: mentionsErr } = await supabase
+      .from('mentions')
+      .select('*')
       .eq('brand_id', brandId);
 
-    if (accountsError || !accounts || accounts.length === 0) {
-      return NextResponse.json({
-        kpis: {
-          subscribers: { value: 0, change: 0, percentChange: 0 },
-          views: { value: 0, change: 0, percentChange: 0 },
-          engagements: { value: 0, change: 0, percentChange: 0 },
-          engagementRate: { value: 0, change: 0, percentChange: 0 }
-        },
-        timeseries: []
-      });
-    }
-
-    const accountIds = accounts.map(a => a.id);
-
-    // Fetch daily aggregates for past 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const startDateStr = thirtyDaysAgo.toISOString().split('T')[0];
-
-    const { data: aggregates, error: aggError } = await supabase
-      .from('daily_aggregates')
-      .select('*')
-      .in('platform_account_id', accountIds)
-      .gte('date', startDateStr)
-      .order('date', { ascending: true });
-
-    if (aggError || !aggregates || aggregates.length === 0) {
+    if (mentionsErr || !mentions || mentions.length === 0) {
       return NextResponse.json(getMockOverview(brandId));
     }
 
-    // Roll up aggregates by date
-    const rollupMap = new Map<string, { date: string; followers: number; views: number; engagements: number }>();
+    // Calculate metrics
+    const totalMentions = mentions.length;
     
-    aggregates.forEach(agg => {
-      const existing = rollupMap.get(agg.date) || { date: agg.date, followers: 0, views: 0, engagements: 0 };
-      existing.followers += Number(agg.followers || 0);
-      existing.views += Number(agg.impressions || 0);
-      existing.engagements += Number(agg.engagements || 0);
-      rollupMap.set(agg.date, existing);
+    // Average Sentiment Score
+    const totalSentimentScore = mentions.reduce((acc, m) => acc + Number(m.sentiment_score || 0.5), 0);
+    const avgSentiment = totalMentions > 0 ? Math.round((totalSentimentScore / totalMentions) * 100) : 50;
+
+    // Primary platform (mode of platforms)
+    const platformCounts = mentions.reduce((acc: any, m) => {
+      acc[m.platform] = (acc[m.platform] || 0) + 1;
+      return acc;
+    }, {});
+    
+    let primaryPlatform = 'Web';
+    let maxCount = 0;
+    Object.entries(platformCounts).forEach(([plat, count]: any) => {
+      if (count > maxCount) {
+        maxCount = count;
+        primaryPlatform = plat;
+      }
     });
 
-    const timeseries = Array.from(rollupMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+    // Buzz Index calculation based on mentions volume
+    let buzzIndex = 'Low';
+    if (totalMentions > 20) buzzIndex = 'Very High';
+    else if (totalMentions > 10) buzzIndex = 'High';
+    else if (totalMentions > 5) buzzIndex = 'Medium';
 
-    // Calculate current KPIs
-    const latestAggregates = timeseries.slice(-1)[0] || { followers: 0, views: 0, engagements: 0 };
-    const firstAggregates = timeseries[0] || { followers: 0, views: 0, engagements: 0 };
-
-    const totalViews = timeseries.reduce((acc, t) => acc + t.views, 0);
-    const totalEngagements = timeseries.reduce((acc, t) => acc + t.engagements, 0);
+    // Build Timeseries
+    const dateMap = new Map<string, { date: string; mentions: number; sentimentSum: number }>();
     
-    const followerChange = latestAggregates.followers - firstAggregates.followers;
-    const followerChangePercent = firstAggregates.followers > 0 
-      ? (followerChange / firstAggregates.followers) * 100 
-      : 0;
+    // Initialize past 7 days
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      dateMap.set(dateStr, { date: dateStr, mentions: 0, sentimentSum: 0 });
+    }
 
-    const avgEngagementRate = totalViews > 0 ? (totalEngagements / totalViews) * 100 : 0;
+    mentions.forEach(m => {
+      const dateStr = new Date(m.published_at).toISOString().split('T')[0];
+      const existing = dateMap.get(dateStr);
+      if (existing) {
+        existing.mentions += 1;
+        existing.sentimentSum += Number(m.sentiment_score || 0.5);
+      }
+    });
+
+    const timeseries = Array.from(dateMap.values()).map(t => ({
+      date: t.date,
+      mentions: t.mentions,
+      sentiment: t.mentions > 0 ? parseFloat((t.sentimentSum / t.mentions).toFixed(2)) : 0.5
+    }));
 
     return NextResponse.json({
       kpis: {
-        subscribers: { 
-          value: latestAggregates.followers, 
-          change: followerChange, 
-          percentChange: parseFloat(followerChangePercent.toFixed(2)) 
-        },
-        views: { 
-          value: totalViews, 
-          change: Math.round(totalViews * 0.1), 
-          percentChange: 10.0 
-        },
-        engagements: { 
-          value: totalEngagements, 
-          change: Math.round(totalEngagements * 0.08), 
-          percentChange: 8.0 
-        },
-        engagementRate: { 
-          value: parseFloat(avgEngagementRate.toFixed(2)), 
-          change: 0, 
-          percentChange: 0 
-        }
+        mentions: { value: totalMentions, change: 3, percentChange: 15.0 },
+        avgSentiment: { value: avgSentiment, change: 2, percentChange: 2.5 },
+        primaryPlatform: { value: primaryPlatform, change: 0, percentChange: 0 },
+        buzzIndex: { value: buzzIndex, change: 0, percentChange: 0 }
       },
       timeseries
     });
